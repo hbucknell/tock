@@ -15,7 +15,7 @@ that Tock supports.
 | [ST Nucleo F446RE](nucleo_f446re/README.md)          | ARM Cortex-M4   | STM32F446      | openocd    | custom         | [ST or distributors][f446re-hw]      |
 | [ST Nucleo F429ZI](nucleo_f429zi/README.md)          | ARM Cortex-M4   | STM32F429      | openocd    | custom         | [ST distributors][f429zi-hw]         |
 | [STM32F3Discovery kit](stm32f3discovery/README.md)   | ARM Cortex-M4   | STM32F303VCT6  | openocd    | custom         | [ST distributors][discovery-hw]      |
-| [SiFive HiFive1](hifive1/README.md)                  | RISC-V          | FE310-G000     | openocd    | tockloader     | *[Crowdsupply][hifive-revB-hw]       |
+| [SiFive HiFive1](hifive1/README.md)                  | RISC-V          | FE310-G000     | openocd    | tockloader     | [Crowdsupply][hifive1-revB-hw]*     |
 | [Digilent Arty A-7 100T](arty-e21/README.md)         | RISC-V RV32IMAC | SiFive E21     | openocd    | tockloader     | [Digilent or distributors][arty-hw]  |
 | [Nexys Video OpenTitan](opentitan/README.md)         | RISC-V RV32IMC  | Ibex           | custom     | custom         | _See board README_                   |
 
