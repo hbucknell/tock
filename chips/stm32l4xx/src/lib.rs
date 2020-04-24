@@ -12,7 +12,7 @@ pub mod chip;
 pub mod nvic;
 
 // Peripherals
-// pub mod dbg;
+pub mod dbg;
 // pub mod dma1;
 // pub mod exti;
 pub mod gpio;
@@ -190,4 +190,5 @@ pub unsafe fn init() {
     cortexm4::nvic::clear_all_pending();
 
     rcc::RCC.init();
+    dbg::DBG.enable_low_power_debug();
 }
