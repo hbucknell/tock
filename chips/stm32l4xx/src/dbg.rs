@@ -1,4 +1,8 @@
-/// Debug peripheral module
+//! Implementation of the STM32L4 Debug peripheral module
+//!
+//! Supports MCU-IDCODE field access, external debug behaviour during low-power
+//! states and peripheral behaviour during breakpoints
+
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 

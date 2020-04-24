@@ -1,3 +1,7 @@
+//! Implementation of the STM32L4 USART peripheral.
+//!
+//! Supports UART features only
+
 use core::cell::Cell;
 use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};

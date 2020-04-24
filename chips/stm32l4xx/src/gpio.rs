@@ -1,3 +1,7 @@
+//! Implementation of the STM32L4 GPIO peripheral.
+//!
+//! Handles configuration and use of GPIOs
+
 // use cortexm4;
 // use cortexm4::support::atomic;
 use enum_primitive::cast::FromPrimitive;
@@ -666,35 +670,35 @@ pub struct Port {
 
 pub static mut PORT: [Port; 8] = [
     Port {
-        registers: GPIOA_REGS, 
+        registers: GPIOA_REGS,
         clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOA)),
     },
     Port {
-        registers: GPIOB_REGS, 
+        registers: GPIOB_REGS,
         clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOB)),
     },
     Port {
-        registers: GPIOC_REGS, 
+        registers: GPIOC_REGS,
         clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOC)),
     },
     Port {
-        registers: GPIOD_REGS, 
+        registers: GPIOD_REGS,
         clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOD)),
     },
     Port {
-        registers: GPIOE_REGS, 
+        registers: GPIOE_REGS,
         clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOE)),
     },
     Port {
-        registers: GPIOF_REGS, 
+        registers: GPIOF_REGS,
         clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOF)),
     },
     Port {
-        registers: GPIOG_REGS, 
+        registers: GPIOG_REGS,
         clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOG)),
     },
     Port {
-        registers: GPIOH_REGS, 
+        registers: GPIOH_REGS,
         clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOH)),
     },
 ];

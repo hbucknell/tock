@@ -1,4 +1,6 @@
-//! Named constants for NVIC ids
+//! IRQ Vector map for the STM32L4
+//!
+//! Named constants for NVIC IRQs
 
 #![allow(non_upper_case_globals)]
 

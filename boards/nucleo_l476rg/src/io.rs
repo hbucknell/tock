@@ -1,3 +1,7 @@
+//! Implementation of the Debug hooks and handlers for Nucleo_L476RG
+//!
+//! Generally this implements the IoWrite Trait and the panic_fmt function
+
 use core::fmt::Write;
 use core::panic::PanicInfo;
 

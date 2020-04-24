@@ -1,4 +1,6 @@
-//! Chip trait setup.
+//! Implementation of the Chip Trait for the STM32L4
+//!
+//! Handles interrupt mapping and basic chip features
 
 use core::fmt::Write;
 use cortexm4;

@@ -1,3 +1,7 @@
+//! Implementation of the STM32L4 Reset and Clock Control peripheral.
+//!
+//! Handles core clock control and peripheral clock gating and reset function
+
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::ClockInterface;

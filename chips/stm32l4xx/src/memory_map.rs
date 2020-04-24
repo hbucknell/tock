@@ -1,6 +1,7 @@
-//! Peripheral implementations for the STM32L4xx MCU.
+//! Peripheral implementations for the STM32L4 MCU.
 //!
 //! STM32L476RG: <https://www.st.com/en/microcontrollers-microprocessors/stm32l476rg.html>
+//! Small changes/checks will allow this to support STM32L48x/49x/4Ax chips also
 
 pub const FLASH_BASE: u32 = 0x08000000; // FLASH(up to 1 MB) base address
 pub const SRAM1_BASE: u32 = 0x20000000; // SRAM1(up to 96 KB) base address
