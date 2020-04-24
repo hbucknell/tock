@@ -1,0 +1,175 @@
+//! Peripheral implementations for the STM32L4xx MCU.
+//!
+//! STM32L476RG: <https://www.st.com/en/microcontrollers-microprocessors/stm32l476rg.html>
+
+pub const FLASH_BASE: u32 = 0x08000000; // FLASH(up to 1 MB) base address
+pub const SRAM1_BASE: u32 = 0x20000000; // SRAM1(up to 96 KB) base address
+pub const SRAM2_BASE: u32 = 0x10000000; // SRAM2(32 KB) base address
+pub const PERIPH_BASE: u32 = 0x40000000; // Peripheral base address
+pub const FMC_BASE: u32 = 0x60000000; // FMC base address
+pub const QSPI_BASE: u32 = 0x90000000; // QUADSPI memories accessible over AHB base address
+
+pub const FMC_R_BASE: u32 = 0xA0000000; // FMC  control registers base address
+pub const QSPI_R_BASE: u32 = 0xA0001000; // QUADSPI control registers base address
+pub const SRAM1_BB_BASE: u32 = 0x22000000; // SRAM1(96 KB) base address in the bit-band region
+pub const PERIPH_BB_BASE: u32 = 0x42000000; // Peripheral base address in the bit-band region
+
+// Legacy defines
+pub const SRAM_BASE: u32 = SRAM1_BASE;
+pub const SRAM_BB_BASE: u32 = SRAM1_BB_BASE;
+
+pub const SRAM1_SIZE_MAX: u32 = 0x00018000; // maximum SRAM1 size (up to 96 KBytes)
+pub const SRAM2_SIZE: u32 = 0x00008000; // SRAM2 size (32 KBytes)
+
+// Peripheral memory map
+pub const APB1PERIPH_BASE: u32 = PERIPH_BASE;
+pub const APB2PERIPH_BASE: u32 = PERIPH_BASE + 0x00010000;
+pub const AHB1PERIPH_BASE: u32 = PERIPH_BASE + 0x00020000;
+pub const AHB2PERIPH_BASE: u32 = PERIPH_BASE + 0x08000000;
+
+pub const FMC_BANK1: u32 = FMC_BASE;
+pub const FMC_BANK1_1: u32 = FMC_BANK1;
+pub const FMC_BANK1_2: u32 = FMC_BANK1 + 0x04000000;
+pub const FMC_BANK1_3: u32 = FMC_BANK1 + 0x08000000;
+pub const FMC_BANK1_4: u32 = FMC_BANK1 + 0x0C000000;
+pub const FMC_BANK3: u32 = FMC_BASE + 0x20000000;
+
+// APB1 peripherals
+pub const TIM2_BASE: u32 = APB1PERIPH_BASE + 0x0000;
+pub const TIM3_BASE: u32 = APB1PERIPH_BASE + 0x0400;
+pub const TIM4_BASE: u32 = APB1PERIPH_BASE + 0x0800;
+pub const TIM5_BASE: u32 = APB1PERIPH_BASE + 0x0C00;
+pub const TIM6_BASE: u32 = APB1PERIPH_BASE + 0x1000;
+pub const TIM7_BASE: u32 = APB1PERIPH_BASE + 0x1400;
+pub const LCD_BASE: u32 = APB1PERIPH_BASE + 0x2400;
+pub const RTC_BASE: u32 = APB1PERIPH_BASE + 0x2800;
+pub const WWDG_BASE: u32 = APB1PERIPH_BASE + 0x2C00;
+pub const IWDG_BASE: u32 = APB1PERIPH_BASE + 0x3000;
+pub const SPI2_BASE: u32 = APB1PERIPH_BASE + 0x3800;
+pub const SPI3_BASE: u32 = APB1PERIPH_BASE + 0x3C00;
+pub const USART2_BASE: u32 = APB1PERIPH_BASE + 0x4400;
+pub const USART3_BASE: u32 = APB1PERIPH_BASE + 0x4800;
+pub const UART4_BASE: u32 = APB1PERIPH_BASE + 0x4C00;
+pub const UART5_BASE: u32 = APB1PERIPH_BASE + 0x5000;
+pub const I2C1_BASE: u32 = APB1PERIPH_BASE + 0x5400;
+pub const I2C2_BASE: u32 = APB1PERIPH_BASE + 0x5800;
+pub const I2C3_BASE: u32 = APB1PERIPH_BASE + 0x5C00;
+pub const CAN1_BASE: u32 = APB1PERIPH_BASE + 0x6400;
+pub const PWR_BASE: u32 = APB1PERIPH_BASE + 0x7000;
+pub const DAC_BASE: u32 = APB1PERIPH_BASE + 0x7400;
+pub const DAC1_BASE: u32 = APB1PERIPH_BASE + 0x7400;
+pub const OPAMP_BASE: u32 = APB1PERIPH_BASE + 0x7800;
+pub const OPAMP1_BASE: u32 = APB1PERIPH_BASE + 0x7800;
+pub const OPAMP2_BASE: u32 = APB1PERIPH_BASE + 0x7810;
+pub const LPTIM1_BASE: u32 = APB1PERIPH_BASE + 0x7C00;
+pub const LPUART1_BASE: u32 = APB1PERIPH_BASE + 0x8000;
+pub const SWPMI1_BASE: u32 = APB1PERIPH_BASE + 0x8800;
+pub const LPTIM2_BASE: u32 = APB1PERIPH_BASE + 0x9400;
+
+// APB2 peripherals
+pub const SYSCFG_BASE: u32 = APB2PERIPH_BASE + 0x0000;
+pub const VREFBUF_BASE: u32 = APB2PERIPH_BASE + 0x0030;
+pub const COMP1_BASE: u32 = APB2PERIPH_BASE + 0x0200;
+pub const COMP2_BASE: u32 = APB2PERIPH_BASE + 0x0204;
+pub const EXTI_BASE: u32 = APB2PERIPH_BASE + 0x0400;
+pub const FIREWALL_BASE: u32 = APB2PERIPH_BASE + 0x1C00;
+pub const SDMMC1_BASE: u32 = APB2PERIPH_BASE + 0x2800;
+pub const TIM1_BASE: u32 = APB2PERIPH_BASE + 0x2C00;
+pub const SPI1_BASE: u32 = APB2PERIPH_BASE + 0x3000;
+pub const TIM8_BASE: u32 = APB2PERIPH_BASE + 0x3400;
+pub const USART1_BASE: u32 = APB2PERIPH_BASE + 0x3800;
+pub const TIM15_BASE: u32 = APB2PERIPH_BASE + 0x4000;
+pub const TIM16_BASE: u32 = APB2PERIPH_BASE + 0x4400;
+pub const TIM17_BASE: u32 = APB2PERIPH_BASE + 0x4800;
+pub const SAI1_BASE: u32 = APB2PERIPH_BASE + 0x5400;
+pub const SAI1_BLOCK_A_BASE: u32 = SAI1_BASE + 0x0004;
+pub const SAI1_BLOCK_B_BASE: u32 = SAI1_BASE + 0x0024;
+pub const SAI2_BASE: u32 = APB2PERIPH_BASE + 0x5800;
+pub const SAI2_BLOCK_A_BASE: u32 = SAI2_BASE + 0x0004;
+pub const SAI2_BLOCK_B_BASE: u32 = SAI2_BASE + 0x0024;
+pub const DFSDM1_BASE: u32 = APB2PERIPH_BASE + 0x6000;
+pub const DFSDM1_CHANNEL0_BASE: u32 = DFSDM1_BASE + 0x0000;
+pub const DFSDM1_CHANNEL1_BASE: u32 = DFSDM1_BASE + 0x0020;
+pub const DFSDM1_CHANNEL2_BASE: u32 = DFSDM1_BASE + 0x0040;
+pub const DFSDM1_CHANNEL3_BASE: u32 = DFSDM1_BASE + 0x0060;
+pub const DFSDM1_CHANNEL4_BASE: u32 = DFSDM1_BASE + 0x0080;
+pub const DFSDM1_CHANNEL5_BASE: u32 = DFSDM1_BASE + 0x00A0;
+pub const DFSDM1_CHANNEL6_BASE: u32 = DFSDM1_BASE + 0x00C0;
+pub const DFSDM1_CHANNEL7_BASE: u32 = DFSDM1_BASE + 0x00E0;
+pub const DFSDM1_FILTER0_BASE: u32 = DFSDM1_BASE + 0x0100;
+pub const DFSDM1_FILTER1_BASE: u32 = DFSDM1_BASE + 0x0180;
+pub const DFSDM1_FILTER2_BASE: u32 = DFSDM1_BASE + 0x0200;
+pub const DFSDM1_FILTER3_BASE: u32 = DFSDM1_BASE + 0x0280;
+
+// AHB1 peripherals
+pub const DMA1_BASE: u32 = AHB1PERIPH_BASE;
+pub const DMA2_BASE: u32 = AHB1PERIPH_BASE + 0x0400;
+pub const RCC_BASE: u32 = AHB1PERIPH_BASE + 0x1000;
+pub const FLASH_R_BASE: u32 = AHB1PERIPH_BASE + 0x2000;
+pub const CRC_BASE: u32 = AHB1PERIPH_BASE + 0x3000;
+pub const TSC_BASE: u32 = AHB1PERIPH_BASE + 0x4000;
+
+pub const DMA1_CHANNEL1_BASE: u32 = DMA1_BASE + 0x0008;
+pub const DMA1_CHANNEL2_BASE: u32 = DMA1_BASE + 0x001C;
+pub const DMA1_CHANNEL3_BASE: u32 = DMA1_BASE + 0x0030;
+pub const DMA1_CHANNEL4_BASE: u32 = DMA1_BASE + 0x0044;
+pub const DMA1_CHANNEL5_BASE: u32 = DMA1_BASE + 0x0058;
+pub const DMA1_CHANNEL6_BASE: u32 = DMA1_BASE + 0x006C;
+pub const DMA1_CHANNEL7_BASE: u32 = DMA1_BASE + 0x0080;
+pub const DMA1_CSELR_BASE: u32 = DMA1_BASE + 0x00A8;
+
+pub const DMA2_CHANNEL1_BASE: u32 = DMA2_BASE + 0x0008;
+pub const DMA2_CHANNEL2_BASE: u32 = DMA2_BASE + 0x001C;
+pub const DMA2_CHANNEL3_BASE: u32 = DMA2_BASE + 0x0030;
+pub const DMA2_CHANNEL4_BASE: u32 = DMA2_BASE + 0x0044;
+pub const DMA2_CHANNEL5_BASE: u32 = DMA2_BASE + 0x0058;
+pub const DMA2_CHANNEL6_BASE: u32 = DMA2_BASE + 0x006C;
+pub const DMA2_CHANNEL7_BASE: u32 = DMA2_BASE + 0x0080;
+pub const DMA2_CSELR_BASE: u32 = DMA2_BASE + 0x00A8;
+
+// AHB2 peripherals
+pub const GPIOA_BASE: u32 = AHB2PERIPH_BASE + 0x0000;
+pub const GPIOB_BASE: u32 = AHB2PERIPH_BASE + 0x0400;
+pub const GPIOC_BASE: u32 = AHB2PERIPH_BASE + 0x0800;
+pub const GPIOD_BASE: u32 = AHB2PERIPH_BASE + 0x0C00;
+pub const GPIOE_BASE: u32 = AHB2PERIPH_BASE + 0x1000;
+pub const GPIOF_BASE: u32 = AHB2PERIPH_BASE + 0x1400;
+pub const GPIOG_BASE: u32 = AHB2PERIPH_BASE + 0x1800;
+pub const GPIOH_BASE: u32 = AHB2PERIPH_BASE + 0x1C00;
+
+pub const USBOTG_BASE: u32 = AHB2PERIPH_BASE + 0x08000000;
+
+pub const ADC1_BASE: u32 = AHB2PERIPH_BASE + 0x08040000;
+pub const ADC2_BASE: u32 = AHB2PERIPH_BASE + 0x08040100;
+pub const ADC3_BASE: u32 = AHB2PERIPH_BASE + 0x08040200;
+pub const ADC123_COMMON_BASE: u32 = AHB2PERIPH_BASE + 0x08040300;
+
+pub const RNG_BASE: u32 = AHB2PERIPH_BASE + 0x08060800;
+
+// FMC Banks registers base  address
+pub const FMC_BANK1_R_BASE: u32 = FMC_R_BASE + 0x0000;
+pub const FMC_BANK1E_R_BASE: u32 = FMC_R_BASE + 0x0104;
+pub const FMC_BANK3_R_BASE: u32 = FMC_R_BASE + 0x0080;
+
+// Debug MCU registers base address
+pub const DBGMCU_BASE: u32 = 0xE0042000;
+
+// USB registers base address
+pub const USB_OTG_FS_PERIPH_BASE: u32 = 0x50000000;
+
+pub const USB_OTG_GLOBAL_BASE: u32 = 0x00000000;
+pub const USB_OTG_DEVICE_BASE: u32 = 0x00000800;
+pub const USB_OTG_IN_ENDPOINT_BASE: u32 = 0x00000900;
+pub const USB_OTG_OUT_ENDPOINT_BASE: u32 = 0x00000B00;
+pub const USB_OTG_EP_REG_SIZE: u32 = 0x00000020;
+pub const USB_OTG_HOST_BASE: u32 = 0x00000400;
+pub const USB_OTG_HOST_PORT_BASE: u32 = 0x00000440;
+pub const USB_OTG_HOST_CHANNEL_BASE: u32 = 0x00000500;
+pub const USB_OTG_HOST_CHANNEL_SIZE: u32 = 0x00000020;
+pub const USB_OTG_PCGCCTL_BASE: u32 = 0x00000E00;
+pub const USB_OTG_FIFO_BASE: u32 = 0x00001000;
+pub const USB_OTG_FIFO_SIZE: u32 = 0x00001000;
+
+pub const PACKAGE_BASE: u32 = 0x1FFF7500; // Package data register base address
+pub const UID_BASE: u32 = 0x1FFF7590; // Unique device ID register base address
+pub const FLASHSIZE_BASE: u32 = 0x1FFF75E0; // Flash size data register base address
