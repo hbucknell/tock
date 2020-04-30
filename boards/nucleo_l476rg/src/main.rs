@@ -16,6 +16,8 @@ use kernel::component::Component;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 
+use components::process_console::ProcessConsoleComponent;
+
 use stm32l4xx::nvic;
 
 /// Support routines for debugging I/O.
@@ -37,11 +39,11 @@ const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultRespons
 #[link_section = ".app_memory"]
 static mut APP_MEMORY: [u8; 65536] = [0; 65536];
 
-// Force the emission of the `.apps` segment in the kernel elf image
-// NOTE: This will cause the kernel to overwrite any existing apps when flashed!
-#[used]
-#[link_section = ".app.hack"]
-static APP_HACK: u8 = 0;
+// // Force the emission of the `.apps` segment in the kernel elf image
+// // NOTE: This will cause the kernel to overwrite any existing apps when flashed!
+// #[used]
+// #[link_section = ".app.hack"]
+// static APP_HACK: u8 = 0;
 
 /// Dummy buffer that causes the linker to reserve enough space for the stack.
 #[no_mangle]
@@ -108,46 +110,45 @@ unsafe fn setup_dma() {
 
 /// Helper function called during bring-up that configures multiplexed I/O.
 unsafe fn set_pin_primary_functions() {
-    use kernel::hil::gpio::Configure;
-    // use stm32l4xx::exti::{LineId, EXTI};
-    use stm32l4xx::gpio::{AlternateFunction, Mode, PinId, PortId, PORT};
-    //use stm32l4xx::syscfg::SYSCFG;
+    use kernel::hil;
+    use kernel::hil::gpio::{Configure, Interrupt};
+    use kernel::ClockInterface;
+    use stm32l4xx::gpio::{AlternateFunction, Mode, Pin};
+    use stm32l4xx::rcc::{self, HCLK2};
 
-    //SYSCFG.enable_clock();
-
-    PORT[PortId::A as usize].enable_clock();
+    // TODO; find better way to handle this
+    rcc::PeripheralClock::AHB2(HCLK2::GPIOA).enable();
+    rcc::PeripheralClock::AHB2(HCLK2::GPIOB).enable();
+    rcc::PeripheralClock::AHB2(HCLK2::GPIOC).enable();
+    rcc::PeripheralClock::AHB2(HCLK2::GPIOD).enable();
+    rcc::PeripheralClock::AHB2(HCLK2::GPIOE).enable();
+    rcc::PeripheralClock::AHB2(HCLK2::GPIOF).enable();
+    rcc::PeripheralClock::AHB2(HCLK2::GPIOG).enable();
+    rcc::PeripheralClock::AHB2(HCLK2::GPIOH).enable();
 
     // User LD2 is connected to PA05. Configure PA05 as `debug_gpio!(0, ...)`
-    PinId::PA05.get_pin().as_ref().map(|pin| {
-        pin.make_output();
+    Pin::PA05.make_output();
 
-        // Configure kernel debug gpios as early as possible
-        kernel::debug::assign_gpios(Some(pin), None, None);
-    });
+    // Configure kernel debug gpios as early as possible
+    kernel::debug::assign_gpios(Some(&Pin::PA05), None, None);
 
     // PORT[PortId::A as usize].enable_clock();
 
     // pa02 and pa03 (USART2) is connected to ST-LINK virtual COM port
-    PinId::PA02.get_pin().as_ref().map(|pin| {
-        pin.set_mode(Mode::AlternateFunctionMode);
-        // AF7 is USART2_TX
-        pin.set_alternate_function(AlternateFunction::AF7);
-    });
-    PinId::PA03.get_pin().as_ref().map(|pin| {
-        pin.set_mode(Mode::AlternateFunctionMode);
-        // AF7 is USART2_RX
-        pin.set_alternate_function(AlternateFunction::AF7);
-    });
-    cortexm4::nvic::Nvic::new(nvic::USART2);
+    // AF7 is USART2_TX
+    Pin::PA02.set_mode(Mode::AlternateFunctionMode);
+    Pin::PA02.set_alternate_function(AlternateFunction::AF7);
+    // AF7 is USART2_RX
+    Pin::PA03.set_mode(Mode::AlternateFunctionMode);
+    Pin::PA03.set_alternate_function(AlternateFunction::AF7);
+    // cortexm4::nvic::Nvic::new(nvic::USART2);
 
-    PORT[PortId::C as usize].enable_clock();
-
+    // ### TODO; Not sure how interrupts will work yet as GPIO is experimental. 
     // button is connected on pc13
-    PinId::PC13.get_pin().as_ref().map(|pin| {
-        pin.set_mode(Mode::Input);
+    Pin::PC13.set_mode(Mode::Input);
+    Pin::PC13.enable_interrupts(hil::gpio::InterruptEdge::FallingEdge);
+    cortexm4::nvic::Nvic::new(nvic::EXTI15_10).enable();
 
-        // EXTI.associate_line_gpiopin(LineId::Exti13, pin);
-    });
     // EXTI13 interrupts is delivered at IRQn 40 (EXTI15_10)
     // cortexm4::nvic::Nvic::new(stm32l4xx::nvic::EXTI15_10).enable();
 
@@ -158,7 +159,7 @@ unsafe fn set_pin_primary_functions() {
     // PORT[PortId::E as usize].enable_clock();
     // PORT[PortId::F as usize].enable_clock();
     // PORT[PortId::G as usize].enable_clock();
-    PORT[PortId::H as usize].enable_clock();
+    // PORT[PortId::H as usize].enable_clock();
 }
 
 /// Helper function for miscellaneous peripheral functions
@@ -211,9 +212,10 @@ pub unsafe fn reset_handler() {
         dynamic_deferred_caller,
     )
     .finalize(());
+    cortexm4::nvic::Nvic::new(nvic::USART2).enable();
 
     // Setup the console.
-    // let pconsole = ProcessConsoleComponent::new(board_kernel, uart_mux).finalize(());
+    let pconsole = ProcessConsoleComponent::new(board_kernel, uart_mux).finalize(());
     let console = components::console::ConsoleComponent::new(board_kernel, uart_mux).finalize(());
     // Create the debugger object that handles calls to `debug!()`.
     components::debug_writer::DebugWriterComponent::new(uart_mux).finalize(());
@@ -224,6 +226,9 @@ pub unsafe fn reset_handler() {
     const HELLO: &str = "hello-\r\n";
     debug!("{}", HELLO);
     // debug_verbose!(HELLO);
+
+    // // WARNING: this should panic, as pin does not exist
+    // stm32l4xx::gpio::Pin::PD07.get_mode();
 
     // setup_dma();
 
@@ -251,51 +256,22 @@ pub unsafe fn reset_handler() {
 
     // io::WRITER.set_initialized();
 
-    // // Setup the process inspection console
-    // let process_console_uart = static_init!(UartDevice, UartDevice::new(mux_uart, true));
-    // process_console_uart.setup();
-    // pub struct ProcessConsoleCapability;
-    // unsafe impl capabilities::ProcessManagementCapability for ProcessConsoleCapability {}
-    // let process_console = static_init!(
-    //     capsules::process_console::ProcessConsole<'static, ProcessConsoleCapability>,
-    //     capsules::process_console::ProcessConsole::new(
-    //         process_console_uart,
-    //         &mut capsules::process_console::WRITE_BUF,
-    //         &mut capsules::process_console::READ_BUF,
-    //         &mut capsules::process_console::COMMAND_BUF,
-    //         board_kernel,
-    //         ProcessConsoleCapability,
-    //     )
-    // );
-    // hil::uart::Transmit::set_transmit_client(process_console_uart, process_console);
-    // hil::uart::Receive::set_receive_client(process_console_uart, process_console);
-    // process_console.start();
-
     // LEDs
 
     // Clock to Port A is enabled in `set_pin_primary_functions()`
 
-    let led = components::led::LedsComponent::new().finalize(components::led_component_helper!(
-        (
-            stm32l4xx::gpio::PinId::PA05.get_pin().as_ref().unwrap(),
-            kernel::hil::gpio::ActivationMode::ActiveHigh
-        ) // (
-          //     stm32l4xx::gpio::PinId::PB07.get_pin().as_ref().unwrap(),
-          //     kernel::hil::gpio::ActivationMode::ActiveHigh
-          // ),
-          // (
-          //     stm32l4xx::gpio::PinId::PB14.get_pin().as_ref().unwrap(),
-          //     kernel::hil::gpio::ActivationMode::ActiveHigh
-          // )
-    ));
+    let led = components::led::LedsComponent::new().finalize(components::led_component_helper!((
+        &stm32l4xx::gpio::Pin::PA05,
+        kernel::hil::gpio::ActivationMode::ActiveHigh
+    )));
 
     const POST_LED: &str = "post-led\r\n";
     debug!("{}", POST_LED);
     // // BUTTONs
     // let button = components::button::ButtonComponent::new(board_kernel).finalize(
     //     components::button_component_helper!((
-    //         stm32l4xx::gpio::PinId::PC13.get_pin().as_ref().unwrap(),
-    //         kernel::hil::gpio::A ctivationMode::ActiveLow,
+    //         &stm32l4xx::gpio::Pin::PC13,
+    //         kernel::hil::gpio::ActivationMode::ActiveLow,
     //         kernel::hil::gpio::FloatingState::PullNone
     //     )),
     // );
@@ -419,6 +395,8 @@ pub unsafe fn reset_handler() {
     // //
     // // See comment in `boards/imix/src/main.rs`
     // virtual_uart_rx_test::run_virtual_uart_receive(mux_uart);
+
+    pconsole.start();
 
     debug!("Initialization complete. Entering main loop");
     // panic!("Stops");

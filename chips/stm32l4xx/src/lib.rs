@@ -14,11 +14,11 @@ pub mod nvic;
 // Peripherals
 pub mod dbg;
 // pub mod dma1;
-// pub mod exti;
+pub mod exti;
 pub mod gpio;
 pub mod rcc;
 // pub mod spi;
-// pub mod syscfg;
+pub mod syscfg;
 // pub mod tim2;
 pub mod memory_map;
 pub mod usart;

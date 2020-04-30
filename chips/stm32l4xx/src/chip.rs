@@ -6,9 +6,10 @@ use core::fmt::Write;
 use cortexm4;
 use kernel::Chip;
 
-// use crate::dma1;
-// use crate::exti;
+use crate::gpio;
 use crate::nvic;
+
+// use crate::dma1;
 // use crate::spi;
 // use crate::tim2;
 use crate::usart;
@@ -64,13 +65,14 @@ impl Chip for Stm32L4xx {
 
                         // nvic::SPI3 => spi::SPI3.handle_interrupt(),
 
-                        // nvic::EXTI0 => exti::EXTI.handle_interrupt(),
-                        // nvic::EXTI1 => exti::EXTI.handle_interrupt(),
-                        // nvic::EXTI2 => exti::EXTI.handle_interrupt(),
-                        // nvic::EXTI3 => exti::EXTI.handle_interrupt(),
-                        // nvic::EXTI4 => exti::EXTI.handle_interrupt(),
-                        // nvic::EXTI9_5 => exti::EXTI.handle_interrupt(),
-                        // nvic::EXTI15_10 => exti::EXTI.handle_interrupt(),
+                        // EXTI Interrupts
+                        nvic::EXTI0 => gpio::Pin::handle_exti0_interrupt(),
+                        nvic::EXTI1 => gpio::Pin::handle_exti1_interrupt(),
+                        nvic::EXTI2 => gpio::Pin::handle_exti2_interrupt(),
+                        nvic::EXTI3 => gpio::Pin::handle_exti3_interrupt(),
+                        nvic::EXTI4 => gpio::Pin::handle_exti4_interrupt(),
+                        nvic::EXTI9_5 => gpio::Pin::handle_exti9_5_interrupt(),
+                        nvic::EXTI15_10 => gpio::Pin::handle_exti15_10_interrupt(),
 
                         // nvic::TIM2 => tim2::TIM2.handle_interrupt(),
                         _ => {

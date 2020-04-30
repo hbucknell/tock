@@ -1,6 +1,9 @@
 //! Implementation of the STM32L4 GPIO peripheral.
 //!
 //! Handles configuration and use of GPIOs
+//!
+//! TODO:
+//! - Add speed control API
 
 // use cortexm4;
 // use cortexm4::support::atomic;
@@ -11,10 +14,12 @@ use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOn
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ClockInterface;
+use kernel::debug;
 
-//use crate::exti;
+use crate::exti;
 use crate::memory_map;
 use crate::rcc;
+use crate::syscfg;
 
 /// General-purpose I/Os
 #[repr(C)]
@@ -486,123 +491,17 @@ const GPIOA_REGS: StaticRef<GpioRegisters> =
 /// by three bits.
 ///
 /// [^1]: Figure 3. STM32F446xC/E block diagram, page 16 of the datasheet
-#[repr(u32)]
-pub enum PortId {
-    A = 0b000,
-    B = 0b001,
-    C = 0b010,
-    D = 0b011,
-    E = 0b100,
-    F = 0b101,
-    G = 0b110,
-    H = 0b111,
-}
-
-/// Name of the GPIO pin on the STM32F446RE.
-///
-/// The "Pinout and pin description" section [^1] of the STM32F446RE datasheet
-/// shows the mapping between the names and the hardware pins on different chip
-/// packages.
-///
-/// The first three bits represent the port and last four bits represent the
-/// pin.
-///
-/// [^1]: Section 4, Pinout and pin description, pages 41-45
-#[rustfmt::skip]
-#[repr(u8)]
-#[derive(Copy, Clone)]
-pub enum PinId {
-    PA00 = 0b0000000, PA01 = 0b0000001, PA02 = 0b0000010, PA03 = 0b0000011,
-    PA04 = 0b0000100, PA05 = 0b0000101, PA06 = 0b0000110, PA07 = 0b0000111,
-    PA08 = 0b0001000, PA09 = 0b0001001, PA10 = 0b0001010, PA11 = 0b0001011,
-    PA12 = 0b0001100, PA13 = 0b0001101, PA14 = 0b0001110, PA15 = 0b0001111,
-
-    PB00 = 0b0010000, PB01 = 0b0010001, PB02 = 0b0010010, PB03 = 0b0010011,
-    PB04 = 0b0010100, PB05 = 0b0010101, PB06 = 0b0010110, PB07 = 0b0010111,
-    PB08 = 0b0011000, PB09 = 0b0011001, PB10 = 0b0011010, PB11 = 0b0011011,
-    PB12 = 0b0011100, PB13 = 0b0011101, PB14 = 0b0011110, PB15 = 0b0011111,
-
-    PC00 = 0b0100000, PC01 = 0b0100001, PC02 = 0b0100010, PC03 = 0b0100011,
-    PC04 = 0b0100100, PC05 = 0b0100101, PC06 = 0b0100110, PC07 = 0b0100111,
-    PC08 = 0b0101000, PC09 = 0b0101001, PC10 = 0b0101010, PC11 = 0b0101011,
-    PC12 = 0b0101100, PC13 = 0b0101101, PC14 = 0b0101110, PC15 = 0b0101111,
-
-    PD00 = 0b0110000, PD01 = 0b0110001, PD02 = 0b0110010, PD03 = 0b0110011,
-    PD04 = 0b0110100, PD05 = 0b0110101, PD06 = 0b0110110, PD07 = 0b0110111,
-    PD08 = 0b0111000, PD09 = 0b0111001, PD10 = 0b0111010, PD11 = 0b0111011,
-    PD12 = 0b0111100, PD13 = 0b0111101, PD14 = 0b0111110, PD15 = 0b0111111,
-
-    PE00 = 0b1000000, PE01 = 0b1000001, PE02 = 0b1000010, PE03 = 0b1000011,
-    PE04 = 0b1000100, PE05 = 0b1000101, PE06 = 0b1000110, PE07 = 0b1000111,
-    PE08 = 0b1001000, PE09 = 0b1001001, PE10 = 0b1001010, PE11 = 0b1001011,
-    PE12 = 0b1001100, PE13 = 0b1001101, PE14 = 0b1001110, PE15 = 0b1001111,
-
-    PF00 = 0b1010000, PF01 = 0b1010001, PF02 = 0b1010010, PF03 = 0b1010011,
-    PF04 = 0b1010100, PF05 = 0b1010101, PF06 = 0b1010110, PF07 = 0b1010111,
-    PF08 = 0b1011000, PF09 = 0b1011001, PF10 = 0b1011010, PF11 = 0b1011011,
-    PF12 = 0b1011100, PF13 = 0b1011101, PF14 = 0b1011110, PF15 = 0b1011111,
-
-    PG00 = 0b1100000, PG01 = 0b1100001, PG02 = 0b1100010, PG03 = 0b1100011,
-    PG04 = 0b1100100, PG05 = 0b1100101, PG06 = 0b1100110, PG07 = 0b1100111,
-    PG08 = 0b1101000, PG09 = 0b1101001, PG10 = 0b1101010, PG11 = 0b1101011,
-    PG12 = 0b1101100, PG13 = 0b1101101, PG14 = 0b1101110, PG15 = 0b1101111,
-
-    PH00 = 0b1110000, PH01 = 0b1110001,
-}
-
-impl PinId {
-    pub fn get_pin(&self) -> &Option<Pin<'static>> {
-        let mut port_num: u8 = *self as u8;
-
-        // Right shift p by 4 bits, so we can get rid of pin bits
-        port_num >>= 4;
-
-        let mut pin_num: u8 = *self as u8;
-        // Mask top 3 bits, so can get only the suffix
-        pin_num &= 0b0001111;
-
-        unsafe { &PIN[usize::from(port_num)][usize::from(pin_num)] }
-    }
-
-    pub fn get_pin_mut(&self) -> &mut Option<Pin<'static>> {
-        let mut port_num: u8 = *self as u8;
-
-        // Right shift p by 4 bits, so we can get rid of pin bits
-        port_num >>= 4;
-
-        let mut pin_num: u8 = *self as u8;
-        // Mask top 3 bits, so can get only the suffix
-        pin_num &= 0b0001111;
-
-        unsafe { &mut PIN[usize::from(port_num)][usize::from(pin_num)] }
-    }
-
-    pub fn get_port(&self) -> &Port {
-        let mut port_num: u8 = *self as u8;
-
-        // Right shift p by 4 bits, so we can get rid of pin bits
-        port_num >>= 4;
-        unsafe { &PORT[usize::from(port_num)] }
-    }
-
-    // extract the last 4 bits. [3:0] is the pin number, [6:4] is the port
-    // number
-    pub fn get_pin_number(&self) -> u8 {
-        let mut pin_num = *self as u8;
-
-        pin_num = pin_num & 0b00001111;
-        pin_num
-    }
-
-    // extract bits [6:4], which is the port number
-    pub fn get_port_number(&self) -> u8 {
-        let mut port_num: u8 = *self as u8;
-
-        // Right shift p by 4 bits, so we can get rid of pin bits
-        port_num >>= 4;
-        port_num
-    }
-}
+// #[repr(u32)]
+// pub enum PortId {
+//     A = 0b000,
+//     B = 0b001,
+//     C = 0b010,
+//     D = 0b011,
+//     E = 0b100,
+//     F = 0b101,
+//     G = 0b110,
+//     H = 0b111,
+// }
 
 /// GPIO pin mode [^1]
 ///
@@ -651,6 +550,21 @@ pub enum AlternateFunction {
     AF15 = 0b1111,
 }
 
+/// Pin mask for handling EXTI 0 IRQ
+const EXTI0_MASK: u32 = 0x00000001;
+/// Pin mask for handling EXTI 1 IRQ
+const EXTI1_MASK: u32 = 0x00000002;
+/// Pin mask for handling EXTI 2 IRQ
+const EXTI2_MASK: u32 = 0x00000004;
+/// Pin mask for handling EXTI 3 IRQ
+const EXTI3_MASK: u32 = 0x00000008;
+/// Pin mask for handling EXTI 4 IRQ
+const EXTI4_MASK: u32 = 0x00000010;
+/// Pin mask for handling EXTI 9-5 IRQ
+const EXTI9_5_MASK: u32 = 0x000003E0;
+/// Pin mask for handling EXTI 15-10 IRQ
+const EXTI15_10_MASK: u32 = 0x0000FC00;
+
 /// GPIO pin internal pull-up and pull-down [^1]
 ///
 /// [^1]: Section 7.4.4, page 189 of reference manual
@@ -663,189 +577,415 @@ enum_from_primitive! {
     }
 }
 
+/// Name of the GPIO pin on the STM32F446RE.
+///
+/// The "Pinout and pin description" section [^1] of the STM32F446RE datasheet
+/// shows the mapping between the names and the hardware pins on different chip
+/// packages.
+///
+/// The first three bits represent the port and last four bits represent the
+/// pin.
+///
+/// [^1]: Section 4, Pinout and pin description, pages 41-45
+#[rustfmt::skip]
+#[repr(u8)]
+#[derive(Copy, Clone)]
+#[derive(Debug)]
+pub enum Pin {
+    PA00, PA01, PA02, PA03,
+    PA04, PA05, PA06, PA07,
+    PA08, PA09, PA10, PA11,
+    PA12, PA13, PA14, PA15,
+
+    PB00, PB01, PB02, PB03,
+    PB04, PB05, PB06, PB07,
+    PB08, PB09, PB10, PB11,
+    PB12, PB13, PB14, PB15,
+
+    PC00, PC01, PC02, PC03,
+    PC04, PC05, PC06, PC07,
+    PC08, PC09, PC10, PC11,
+    PC12, PC13, PC14, PC15,
+
+    PD00, PD01, PD02, PD03,
+    PD04, PD05, PD06, PD07,
+    PD08, PD09, PD10, PD11,
+    PD12, PD13, PD14, PD15,
+    
+    PE00, PE01, PE02, PE03,
+    PE04, PE05, PE06, PE07,
+    PE08, PE09, PE10, PE11,
+    PE12, PE13, PE14, PE15,
+
+    PF00, PF01, PF02, PF03,
+    PF04, PF05, PF06, PF07,
+    PF08, PF09, PF10, PF11,
+    PF12, PF13, PF14, PF15,
+
+    PG00, PG01, PG02, PG03,
+    PG04, PG05, PG06, PG07,
+    PG08, PG09, PG10, PG11,
+    PG12, PG13, PG14, PG15,
+
+    PH00, PH01, PH02, PH03,
+    PH04, PH05, PH06, PH07,
+    PH08, PH09, PH10, PH11,
+    PH12, PH13, PH14, PH15,
+
+    // Port I - only on STM32L49x/L4Ax
+    // PI00, PI01, PI02, PI03,
+    // PI04, PI05, PI06, PI07,
+    // PI08, PI09, PI10, PI11,
+    // PI12, PI13, PI14, PI15,
+}
+
+// Active Pin to carry out operations on
+pub struct GpioPin {
+    registers: StaticRef<GpioRegisters>,
+    mask: u32,
+    // exti_lineid: OptionalCell<exti::LineId>,
+}
+
+impl GpioPin {
+    const fn new(port: StaticRef<GpioRegisters>, mask: u32) -> GpioPin {
+        GpioPin {
+            registers: port,
+            mask: mask,
+        }
+    }
+}
+
+struct ExtiClients {
+    client: [OptionalCell<&'static dyn hil::gpio::Client>; 16],
+}
+
+static mut EXTI_CLIENTS: ExtiClients = ExtiClients::new();
+
+impl ExtiClients {
+    const fn new() -> ExtiClients {
+        ExtiClients {
+            client: [
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+                OptionalCell::empty(),
+            ],
+        }
+    }
+}
+
+// macro_rules! declare_gpio_pins {
+//     ($($pin:ident)*) => {
+//         [
+//             $(Some(Pin::new(GpioPin::$pin)), )*
+//         ]
+//     }
+// }
+
+// macro_rules! declare_gpio_pins {
+//     ($($pin:ident)*) => {
+//         [
+//             match (*$pin as usize & 0xf0) >> 4 {
+//                 0 => $(Some(Pin::new(GPIOA_REGS, 1 << (GpioPin::$pin as usize & 0x0f))), )*,
+//                 _ => $(Some(Pin::new(GPIOA_REGS, 1 << (GpioPin::$pin as usize & 0x0f))), )*,
+//             }
+//         ]
+//     }
+// }
+
+// macro_rules! declare_gpio_pin {
+//     ($($pin:ident)*) => {
+//         $(Some(Pin::new(PORT[(GpioPin::$pin as usize & 0xf0) >> 4].registers, 1 << (GpioPin::$pin as usize & 0x0f))) )*
+//     }
+// }
+
+// We need to use `Option<Pin>`, instead of just `Pin` because GPIOH has
+// only two pins - PH00 and PH01, rather than the usual sixteen pins.
+pub static mut PIN: [Option<GpioPin>; 16 * 8] = [
+    // Port A
+    Some(GpioPin::new(GPIOA_REGS, 00)),
+    Some(GpioPin::new(GPIOA_REGS, 01)),
+    Some(GpioPin::new(GPIOA_REGS, 02)),
+    Some(GpioPin::new(GPIOA_REGS, 03)),
+    Some(GpioPin::new(GPIOA_REGS, 04)),
+    Some(GpioPin::new(GPIOA_REGS, 05)),
+    Some(GpioPin::new(GPIOA_REGS, 06)),
+    Some(GpioPin::new(GPIOA_REGS, 07)),
+    Some(GpioPin::new(GPIOA_REGS, 08)),
+    Some(GpioPin::new(GPIOA_REGS, 09)),
+    Some(GpioPin::new(GPIOA_REGS, 10)),
+    Some(GpioPin::new(GPIOA_REGS, 11)),
+    Some(GpioPin::new(GPIOA_REGS, 12)),
+    Some(GpioPin::new(GPIOA_REGS, 13)),
+    Some(GpioPin::new(GPIOA_REGS, 14)),
+    Some(GpioPin::new(GPIOA_REGS, 15)),
+    // Port B
+    Some(GpioPin::new(GPIOB_REGS, 00)),
+    Some(GpioPin::new(GPIOB_REGS, 01)),
+    Some(GpioPin::new(GPIOB_REGS, 02)),
+    Some(GpioPin::new(GPIOB_REGS, 03)),
+    Some(GpioPin::new(GPIOB_REGS, 04)),
+    Some(GpioPin::new(GPIOB_REGS, 05)),
+    Some(GpioPin::new(GPIOB_REGS, 06)),
+    Some(GpioPin::new(GPIOB_REGS, 07)),
+    Some(GpioPin::new(GPIOB_REGS, 08)),
+    Some(GpioPin::new(GPIOB_REGS, 09)),
+    Some(GpioPin::new(GPIOB_REGS, 10)),
+    Some(GpioPin::new(GPIOB_REGS, 11)),
+    Some(GpioPin::new(GPIOB_REGS, 12)),
+    Some(GpioPin::new(GPIOB_REGS, 13)),
+    Some(GpioPin::new(GPIOB_REGS, 14)),
+    Some(GpioPin::new(GPIOB_REGS, 15)),
+    // Port C
+    Some(GpioPin::new(GPIOC_REGS, 00)),
+    Some(GpioPin::new(GPIOC_REGS, 01)),
+    Some(GpioPin::new(GPIOC_REGS, 02)),
+    Some(GpioPin::new(GPIOC_REGS, 03)),
+    Some(GpioPin::new(GPIOC_REGS, 04)),
+    Some(GpioPin::new(GPIOC_REGS, 05)),
+    Some(GpioPin::new(GPIOC_REGS, 06)),
+    Some(GpioPin::new(GPIOC_REGS, 07)),
+    Some(GpioPin::new(GPIOC_REGS, 08)),
+    Some(GpioPin::new(GPIOC_REGS, 09)),
+    Some(GpioPin::new(GPIOC_REGS, 10)),
+    Some(GpioPin::new(GPIOC_REGS, 11)),
+    Some(GpioPin::new(GPIOC_REGS, 12)),
+    Some(GpioPin::new(GPIOC_REGS, 13)),
+    Some(GpioPin::new(GPIOC_REGS, 14)),
+    Some(GpioPin::new(GPIOC_REGS, 15)),
+    // Port D
+    None,   // 00
+    None,   // 01
+    Some(GpioPin::new(GPIOD_REGS, 02)),
+    None,   // 03
+    None,   // 04
+    None,   // 05
+    None,   // 06
+    None,   // 07
+    None,   // 08
+    None,   // 09
+    None,   // 10
+    None,   // 11
+    None,   // 12
+    None,   // 13
+    None,   // 14
+    None,   // 15
+    
+    // Port E
+    None,   // 00
+    None,   // 01
+    None,   // 02
+    None,   // 03
+    None,   // 04
+    None,   // 05
+    None,   // 06
+    None,   // 07
+    None,   // 08
+    None,   // 09
+    None,   // 10
+    None,   // 11
+    None,   // 12
+    None,   // 13
+    None,   // 14
+    None,   // 15
+    
+    // Port F
+    None,   // 00
+    None,   // 01
+    None,   // 02
+    None,   // 03
+    None,   // 04
+    None,   // 05
+    None,   // 06
+    None,   // 07
+    None,   // 08
+    None,   // 09
+    None,   // 10
+    None,   // 11
+    None,   // 12
+    None,   // 13
+    None,   // 14
+    None,   // 15
+    
+    // Port G
+    None,   // 00
+    None,   // 01
+    None,   // 02
+    None,   // 03
+    None,   // 04
+    None,   // 05
+    None,   // 06
+    None,   // 07
+    None,   // 08
+    None,   // 09
+    None,   // 10
+    None,   // 11
+    None,   // 12
+    None,   // 13
+    None,   // 14
+    None,   // 15
+    
+    // Port H
+    Some(GpioPin::new(GPIOH_REGS, 0)),
+    Some(GpioPin::new(GPIOH_REGS, 1)),
+    None,   // 02
+    None,   // 03
+    None,   // 04
+    None,   // 05
+    None,   // 06
+    None,   // 07
+    None,   // 08
+    None,   // 09
+    None,   // 10
+    None,   // 11
+    None,   // 12
+    None,   // 13
+    None,   // 14
+    None,   // 15
+];
+
+impl Pin {
+    fn get_pin(&self) -> &GpioPin {
+        unsafe { match PIN[usize::from_u32(*self as u32).unwrap()] {
+            None => { panic!("get_pin: NOT found other"); },
+            _ => {},
+        }; }
+        unsafe { &PIN[usize::from_u32(*self as u32).unwrap()].as_ref().unwrap() }
+    }
+
+    // pub fn get_pin_mut(&self) -> &mut GpioPin {
+    //     unsafe { &mut PIN[usize::from_u32(*self as u32).unwrap()].as_mut().unwrap() }
+    // }
+    // fn get_pin_mut(&self) -> &mut Option<Pin> {
+    //     let mut port_num: u8 = *self as u8;
+
+    //     // Right shift p by 4 bits, so we can get rid of pin bits
+    //     port_num >>= 4;
+
+    //     let mut pin_num: u8 = *self as u8;
+    //     // Mask top 3 bits, so can get only the suffix
+    //     pin_num &= 0b0001111;
+
+    //     unsafe { &mut PIN[usize::from(port_num)][usize::from(pin_num)] }
+    // }
+
+    fn get_port(&self) -> &Port {
+        let mut port_num: u8 = *self as u8;
+
+        // Right shift p by 4 bits, so we can get rid of pin bits
+        port_num >>= 4;
+        unsafe { &PORT[usize::from(port_num)] }
+    }
+
+    // extract the last 4 bits. [3:0] is the pin number, [6:4] is the port
+    // number
+    fn get_pin_number(&self) -> u8 {
+        let mut pin_num = *self as u8;
+
+        pin_num = pin_num & 0b00001111;
+        pin_num
+    }
+
+    // extract bits [6:4], which is the port number
+    fn get_port_number(&self) -> u8 {
+        let mut port_num: u8 = *self as u8;
+
+        // Right shift p by 4 bits, so we can get rid of pin bits
+        port_num >>= 4;
+        port_num
+    }
+}
+
 pub struct Port {
     registers: StaticRef<GpioRegisters>,
-    clock: PortClock,
+    clock: rcc::PeripheralClock,
 }
 
 pub static mut PORT: [Port; 8] = [
     Port {
         registers: GPIOA_REGS,
-        clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOA)),
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOA),
     },
     Port {
         registers: GPIOB_REGS,
-        clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOB)),
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOB),
     },
     Port {
         registers: GPIOC_REGS,
-        clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOC)),
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOC),
     },
     Port {
         registers: GPIOD_REGS,
-        clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOD)),
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOD),
     },
     Port {
         registers: GPIOE_REGS,
-        clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOE)),
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOE),
     },
     Port {
         registers: GPIOF_REGS,
-        clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOF)),
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOF),
     },
     Port {
         registers: GPIOG_REGS,
-        clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOG)),
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOG),
     },
     Port {
         registers: GPIOH_REGS,
-        clock: PortClock(rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOH)),
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOH),
     },
 ];
 
-impl Port {
-    pub fn is_enabled_clock(&self) -> bool {
-        self.clock.is_enabled()
-    }
+// impl Port {
+//     pub fn is_enabled_clock(&self) -> bool {
+//         self.clock.is_enabled()
+//     }
 
-    pub fn enable_clock(&self) {
-        self.clock.enable();
-    }
+//     pub fn enable_clock(&self) {
+//         self.clock.enable();
+//     }
 
-    pub fn disable_clock(&self) {
-        self.clock.disable();
-    }
-}
+//     pub fn disable_clock(&self) {
+//         self.clock.disable();
+//     }
+// }
 
-struct PortClock(rcc::PeripheralClock);
+impl Pin {
+    // pub fn set_client(&self, client: &'a dyn hil::gpio::Client) {
+    //     let index = self.get_pin_number();
 
-impl ClockInterface for PortClock {
-    fn is_enabled(&self) -> bool {
-        self.0.is_enabled()
-    }
-
-    fn enable(&self) {
-        self.0.enable();
-    }
-
-    fn disable(&self) {
-        self.0.disable();
-    }
-}
-
-// `exti_lineid` is used to configure EXTI settings for the Pin.
-pub struct Pin<'a> {
-    pinid: PinId,
-    client: OptionalCell<&'a dyn hil::gpio::Client>,
-    // exti_lineid: OptionalCell<exti::LineId>,
-}
-
-macro_rules! declare_gpio_pins {
-    ($($pin:ident)*) => {
-        [
-            $(Some(Pin::new(PinId::$pin)), )*
-        ]
-    }
-}
-
-// We need to use `Option<Pin>`, instead of just `Pin` because GPIOH has
-// only two pins - PH00 and PH01, rather than the usual sixteen pins.
-pub static mut PIN: [[Option<Pin<'static>>; 16]; 8] = [
-    declare_gpio_pins! {
-        PA00 PA01 PA02 PA03 PA04 PA05 PA06 PA07
-        PA08 PA09 PA10 PA11 PA12 PA13 PA14 PA15
-    },
-    declare_gpio_pins! {
-        PB00 PB01 PB02 PB03 PB04 PB05 PB06 PB07
-        PB08 PB09 PB10 PB11 PB12 PB13 PB14 PB15
-    },
-    declare_gpio_pins! {
-        PC00 PC01 PC02 PC03 PC04 PC05 PC06 PC07
-        PC08 PC09 PC10 PC11 PC12 PC13 PC14 PC15
-    },
-    declare_gpio_pins! {
-        PD00 PD01 PD02 PD03 PD04 PD05 PD06 PD07
-        PD08 PD09 PD10 PD11 PD12 PD13 PD14 PD15
-    },
-    declare_gpio_pins! {
-        PE00 PE01 PE02 PE03 PE04 PE05 PE06 PE07
-        PE08 PE09 PE10 PE11 PE12 PE13 PE14 PE15
-    },
-    declare_gpio_pins! {
-        PF00 PF01 PF02 PF03 PF04 PF05 PF06 PF07
-        PF08 PF09 PF10 PF11 PF12 PF13 PF14 PF15
-    },
-    declare_gpio_pins! {
-        PG00 PG01 PG02 PG03 PG04 PG05 PG06 PG07
-        PG08 PG09 PG10 PG11 PG12 PG13 PG14 PG15
-    },
-    [
-        Some(Pin::new(PinId::PH00)),
-        Some(Pin::new(PinId::PH01)),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    ],
-];
-
-impl Pin<'a> {
-    const fn new(pinid: PinId) -> Pin<'a> {
-        Pin {
-            pinid: pinid,
-            client: OptionalCell::empty(),
-            // exti_lineid: OptionalCell::empty(),
-        }
-    }
-
-    pub fn set_client(&self, client: &'a dyn hil::gpio::Client) {
-        self.client.set(client);
-    }
-
-    pub fn handle_interrupt(&self) {
-        self.client.map(|client| client.fired());
-    }
+    //     EXTI_CLIENTS.client[usize::from(index as u8)].set(client);
+    // }
 
     pub fn get_mode(&self) -> Mode {
-        let port = self.pinid.get_port();
+        // let maybe = unsafe {
+        //     &PIN[usize::from((*self as u16 & 0x00f0) >> 4)][usize::from(*self as u16 & 0x000f)]
+        // };
 
-        let val = match self.pinid.get_pin_number() {
-            0b0000 => port.registers.moder.read(MODER::MODER0),
-            0b0001 => port.registers.moder.read(MODER::MODER1),
-            0b0010 => port.registers.moder.read(MODER::MODER2),
-            0b0011 => port.registers.moder.read(MODER::MODER3),
-            0b0100 => port.registers.moder.read(MODER::MODER4),
-            0b0101 => port.registers.moder.read(MODER::MODER5),
-            0b0110 => port.registers.moder.read(MODER::MODER6),
-            0b0111 => port.registers.moder.read(MODER::MODER7),
-            0b1000 => port.registers.moder.read(MODER::MODER8),
-            0b1001 => port.registers.moder.read(MODER::MODER9),
-            0b1010 => port.registers.moder.read(MODER::MODER10),
-            0b1011 => port.registers.moder.read(MODER::MODER11),
-            0b1100 => port.registers.moder.read(MODER::MODER12),
-            0b1101 => port.registers.moder.read(MODER::MODER13),
-            0b1110 => port.registers.moder.read(MODER::MODER14),
-            0b1111 => port.registers.moder.read(MODER::MODER15),
-            _ => 0,
-        };
+        // let pin = maybe.as_ref().expect("get_mode: invalid pin accessed");
 
+        let pin = self.get_pin();
+        // panic!("get_mode: invalid pin accessed {}", *self as u32);
+        let val = pin.registers.moder.get() & pin.mask;
         Mode::from_u32(val).unwrap_or(Mode::Input)
     }
 
     pub fn set_mode(&self, mode: Mode) {
-        let port = self.pinid.get_port();
+        let port = self.get_port();
 
-        match self.pinid.get_pin_number() {
+        match self.get_pin_number() {
             0b0000 => port.registers.moder.modify(MODER::MODER0.val(mode as u32)),
             0b0001 => port.registers.moder.modify(MODER::MODER1.val(mode as u32)),
             0b0010 => port.registers.moder.modify(MODER::MODER2.val(mode as u32)),
@@ -867,9 +1007,9 @@ impl Pin<'a> {
     }
 
     pub fn set_alternate_function(&self, af: AlternateFunction) {
-        let port = self.pinid.get_port();
+        let port = self.get_port();
 
-        match self.pinid.get_pin_number() {
+        match self.get_pin_number() {
             0b0000 => port.registers.afrl.modify(AFRL::AFRL0.val(af as u32)),
             0b0001 => port.registers.afrl.modify(AFRL::AFRL1.val(af as u32)),
             0b0010 => port.registers.afrl.modify(AFRL::AFRL2.val(af as u32)),
@@ -890,18 +1030,18 @@ impl Pin<'a> {
         }
     }
 
-    pub fn get_pinid(&self) -> PinId {
-        self.pinid
-    }
+    // pub fn get_pinid(&self) -> GpioPin {
+    //     self
+    // }
 
     // pub fn set_exti_lineid(&self, lineid: exti::LineId) {
     //     self.exti_lineid.set(lineid);
     // }
 
     fn set_mode_output_pushpull(&self) {
-        let port = self.pinid.get_port();
+        let port = self.get_port();
 
-        match self.pinid.get_pin_number() {
+        match self.get_pin_number() {
             0b0000 => port.registers.otyper.modify(OTYPER::OT0::CLEAR),
             0b0001 => port.registers.otyper.modify(OTYPER::OT1::CLEAR),
             0b0010 => port.registers.otyper.modify(OTYPER::OT2::CLEAR),
@@ -923,9 +1063,9 @@ impl Pin<'a> {
     }
 
     fn get_pullup_pulldown(&self) -> PullUpPullDown {
-        let port = self.pinid.get_port();
+        let port = self.get_port();
 
-        let val = match self.pinid.get_pin_number() {
+        let val = match self.get_pin_number() {
             0b0000 => port.registers.pupdr.read(PUPDR::PUPDR0),
             0b0001 => port.registers.pupdr.read(PUPDR::PUPDR1),
             0b0010 => port.registers.pupdr.read(PUPDR::PUPDR2),
@@ -949,9 +1089,9 @@ impl Pin<'a> {
     }
 
     fn set_pullup_pulldown(&self, pupd: PullUpPullDown) {
-        let port = self.pinid.get_port();
+        let port = self.get_port();
 
-        match self.pinid.get_pin_number() {
+        match self.get_pin_number() {
             0b0000 => port.registers.pupdr.modify(PUPDR::PUPDR0.val(pupd as u32)),
             0b0001 => port.registers.pupdr.modify(PUPDR::PUPDR1.val(pupd as u32)),
             0b0010 => port.registers.pupdr.modify(PUPDR::PUPDR2.val(pupd as u32)),
@@ -973,9 +1113,9 @@ impl Pin<'a> {
     }
 
     fn set_output_high(&self) {
-        let port = self.pinid.get_port();
+        let port = self.get_port();
 
-        match self.pinid.get_pin_number() {
+        match self.get_pin_number() {
             0b0000 => port.registers.bsrr.write(BSRR::BS0::SET),
             0b0001 => port.registers.bsrr.write(BSRR::BS1::SET),
             0b0010 => port.registers.bsrr.write(BSRR::BS2::SET),
@@ -997,9 +1137,9 @@ impl Pin<'a> {
     }
 
     fn set_output_low(&self) {
-        let port = self.pinid.get_port();
+        let port = self.get_port();
 
-        match self.pinid.get_pin_number() {
+        match self.get_pin_number() {
             0b0000 => port.registers.bsrr.write(BSRR::BR0::SET),
             0b0001 => port.registers.bsrr.write(BSRR::BR1::SET),
             0b0010 => port.registers.bsrr.write(BSRR::BR2::SET),
@@ -1021,9 +1161,9 @@ impl Pin<'a> {
     }
 
     fn is_output_high(&self) -> bool {
-        let port = self.pinid.get_port();
+        let port = self.get_port();
 
-        match self.pinid.get_pin_number() {
+        match self.get_pin_number() {
             0b0000 => port.registers.odr.is_set(ODR::ODR0),
             0b0001 => port.registers.odr.is_set(ODR::ODR1),
             0b0010 => port.registers.odr.is_set(ODR::ODR2),
@@ -1055,9 +1195,9 @@ impl Pin<'a> {
     }
 
     fn read_input(&self) -> bool {
-        let port = self.pinid.get_port();
+        let port = self.get_port();
 
-        match self.pinid.get_pin_number() {
+        match self.get_pin_number() {
             0b0000 => port.registers.idr.is_set(IDR::IDR0),
             0b0001 => port.registers.idr.is_set(IDR::IDR1),
             0b0010 => port.registers.idr.is_set(IDR::IDR2),
@@ -1077,14 +1217,112 @@ impl Pin<'a> {
             _ => false,
         }
     }
+
+    /// Map Pin to LineId
+    fn to_lineid(&self) -> exti::LineId {
+        // How to handle mapping errors? Panic? Silent? debug?
+        // This mapping (pin# -> LineId is implicit), should it be explicit?
+        exti::LineId::from_u8(self.get_pin_number()).unwrap()
+    }
+
+    /// Map Pin to ExtiPin
+    fn to_extipin(&self) -> syscfg::ExtiPin {
+        // How to handle mapping errors? Panic? Silent? debug?
+        // This mapping (pin# -> LineId is implicit), should it be explicit?
+        syscfg::ExtiPin::from_u8(self.get_pin_number()).unwrap()
+    }
+
+    /// Map Pin to ExtiPort
+    fn to_extiport(&self) -> syscfg::ExtiPort {
+        // How to handle mapping errors? Panic? Silent? debug?
+        // This mapping (pin# -> LineId is implicit), should it be explicit?
+        syscfg::ExtiPort::from_u8(self.get_port_number()).unwrap()
+    }
+
+    /// Handle GPIO - EXTI 0 - IRQ
+    pub fn handle_exti0_interrupt() {
+        unsafe {
+            let active = exti::EXTI.handle_exti_lines(EXTI0_MASK);
+            if active != 0 {
+                EXTI_CLIENTS.client[0].map(|client| client.fired());
+            }
+        }
+        debug!("EXTI 0 fired");
+    }
+    /// Handle GPIO - EXTI 1 - IRQ
+    pub fn handle_exti1_interrupt() {
+        unsafe {
+            let active = exti::EXTI.handle_exti_lines(EXTI1_MASK);
+            if active != 0 {
+                EXTI_CLIENTS.client[1].map(|client| client.fired());
+            }
+        }
+        debug!("EXTI 1 fired");
+    }
+    /// Handle GPIO - EXTI 2 - IRQ
+    pub fn handle_exti2_interrupt() {
+        unsafe {
+            let active = exti::EXTI.handle_exti_lines(EXTI2_MASK);
+            if active != 0 {
+                EXTI_CLIENTS.client[2].map(|client| client.fired());
+            }
+        }
+        debug!("EXTI 2 fired");
+    }
+    /// Handle GPIO - EXTI 3 - IRQ
+    pub fn handle_exti3_interrupt() {
+        unsafe {
+            let active = exti::EXTI.handle_exti_lines(EXTI3_MASK);
+            if active != 0 {
+                EXTI_CLIENTS.client[3].map(|client| client.fired());
+            }
+        }
+        debug!("EXTI 3 fired");
+    }
+    /// Handle GPIO - EXTI 4 - IRQ
+    pub fn handle_exti4_interrupt() {
+        unsafe {
+            let active = exti::EXTI.handle_exti_lines(EXTI4_MASK);
+            if active != 0 {
+                EXTI_CLIENTS.client[4].map(|client| client.fired());
+            }
+        }
+        debug!("EXTI 4 fired");
+    }
+    /// Handle GPIO - EXTI 9-5 - IRQ
+    pub fn handle_exti9_5_interrupt() {
+        unsafe {
+            let mut active = exti::EXTI.handle_exti_lines(EXTI9_5_MASK);
+            while active != 0 {
+                let pin = active.trailing_zeros() as usize;
+                active &= !(1 << pin);
+                EXTI_CLIENTS.client[pin].map(|client| client.fired());
+            }
+        }
+        debug!("EXTI 9-5 fired");
+    }
+    /// Handle GPIO - EXTI 15-10 - IRQ
+    pub fn handle_exti15_10_interrupt() {
+        unsafe {
+            let mut active = exti::EXTI.handle_exti_lines(EXTI15_10_MASK);
+            while active != 0 {
+                let pin = active.trailing_zeros() as usize;
+                active &= !(1 << pin);
+                EXTI_CLIENTS.client[pin].map(|client| client.fired());
+            }
+        }
+        debug!("EXTI 15-10 fired");
+    }
 }
 
-impl hil::gpio::Pin for Pin<'a> {}
-// impl hil::gpio::InterruptPin for Pin<'a> {}
+impl hil::gpio::Pin for Pin {}
+impl hil::gpio::InterruptPin for Pin {}
 
-impl hil::gpio::Configure for Pin<'a> {
+impl hil::gpio::Configure for Pin {
     /// Output mode default is push-pull
     fn make_output(&self) -> hil::gpio::Configuration {
+        self.get_port().clock.enable();
+
         self.set_mode(Mode::GeneralPurposeOutputMode);
         self.set_mode_output_pushpull();
         hil::gpio::Configuration::Output
@@ -1095,6 +1333,8 @@ impl hil::gpio::Configure for Pin<'a> {
     /// trigger is automatically activated. Schmitt trigger is deactivated in
     /// AnalogMode.
     fn make_input(&self) -> hil::gpio::Configuration {
+        self.get_port().clock.enable();
+
         self.set_mode(Mode::Input);
         hil::gpio::Configuration::Input
     }
@@ -1103,20 +1343,28 @@ impl hil::gpio::Configure for Pin<'a> {
     /// internal schmitt trigger. We do not disable clock to the GPIO port,
     /// because there could be other pins active on the port.
     fn deactivate_to_low_power(&self) {
+        self.get_port().clock.enable();
+
         self.set_mode(Mode::AnalogMode);
     }
 
     fn disable_output(&self) -> hil::gpio::Configuration {
+        self.get_port().clock.enable();
+
         self.set_mode(Mode::AnalogMode);
         hil::gpio::Configuration::LowPower
     }
 
     fn disable_input(&self) -> hil::gpio::Configuration {
+        self.get_port().clock.enable();
+
         self.set_mode(Mode::AnalogMode);
         hil::gpio::Configuration::LowPower
     }
 
     fn set_floating_state(&self, mode: hil::gpio::FloatingState) {
+        self.get_port().clock.enable();
+
         match mode {
             hil::gpio::FloatingState::PullUp => self.set_pullup_pulldown(PullUpPullDown::PullUp),
             hil::gpio::FloatingState::PullDown => {
@@ -1154,7 +1402,7 @@ impl hil::gpio::Configure for Pin<'a> {
     }
 }
 
-impl hil::gpio::Output for Pin<'a> {
+impl hil::gpio::Output for Pin {
     fn set(&self) {
         self.set_output_high();
     }
@@ -1168,64 +1416,73 @@ impl hil::gpio::Output for Pin<'a> {
     }
 }
 
-impl hil::gpio::Input for Pin<'a> {
+impl hil::gpio::Input for Pin {
     fn read(&self) -> bool {
         self.read_input()
     }
 }
 
-// impl hil::gpio::Interrupt for Pin<'a> {
-//     fn enable_interrupts(&self, mode: hil::gpio::InterruptEdge) {
-//         unsafe {
-//             atomic(|| {
-//                 self.exti_lineid.map(|lineid| {
-//                     let l = lineid.clone();
+impl hil::gpio::Interrupt for Pin {
+    fn enable_interrupts(&self, mode: hil::gpio::InterruptEdge) {
+        // TODO handle errors in lineid conversion
+        let lineid = self.to_lineid();
 
-//                     // disable the interrupt
-//                     exti::EXTI.mask_interrupt(l);
-//                     exti::EXTI.clear_pending(l);
+        unsafe {
+            // disable the interrupt
+            exti::EXTI.mask_interrupt(lineid);
+            exti::EXTI.clear_pending(lineid);
 
-//                     match mode {
-//                         hil::gpio::InterruptEdge::EitherEdge => {
-//                             exti::EXTI.select_rising_trigger(l);
-//                             exti::EXTI.select_falling_trigger(l);
-//                         }
-//                         hil::gpio::InterruptEdge::RisingEdge => {
-//                             exti::EXTI.select_rising_trigger(l);
-//                             exti::EXTI.deselect_falling_trigger(l);
-//                         }
-//                         hil::gpio::InterruptEdge::FallingEdge => {
-//                             exti::EXTI.deselect_rising_trigger(l);
-//                             exti::EXTI.select_falling_trigger(l);
-//                         }
-//                     }
+            syscfg::SYSCFG.select_exti_source(self.to_extipin(), self.to_extiport());
 
-//                     exti::EXTI.unmask_interrupt(l);
-//                 });
-//             });
-//         }
-//     }
+            match mode {
+                hil::gpio::InterruptEdge::EitherEdge => {
+                    exti::EXTI.select_rising_trigger(lineid);
+                    exti::EXTI.select_falling_trigger(lineid);
+                }
+                hil::gpio::InterruptEdge::RisingEdge => {
+                    exti::EXTI.select_rising_trigger(lineid);
+                    exti::EXTI.deselect_falling_trigger(lineid);
+                }
+                hil::gpio::InterruptEdge::FallingEdge => {
+                    exti::EXTI.deselect_rising_trigger(lineid);
+                    exti::EXTI.select_falling_trigger(lineid);
+                }
+            }
 
-//     fn disable_interrupts(&self) {
-//         unsafe {
-//             atomic(|| {
-//                 self.exti_lineid.map(|lineid| {
-//                     let l = lineid.clone();
-//                     exti::EXTI.mask_interrupt(l);
-//                     exti::EXTI.clear_pending(l);
-//                 });
-//             });
-//         }
-//     }
+            exti::EXTI.unmask_interrupt(lineid);
+        }
+    }
 
-//     fn set_client(&self, client: &'static dyn hil::gpio::Client) {
-//         self.client.set(client);
-//     }
+    fn disable_interrupts(&self) {
+        // TODO handle errors in lineid conversion
+        let lineid = self.to_lineid();
 
-//     fn is_pending(&self) -> bool {
-//         unsafe {
-//             self.exti_lineid
-//                 .map_or(false, |&mut lineid| exti::EXTI.is_pending(lineid))
-//         }
-//     }
-// }
+        unsafe {
+            exti::EXTI.mask_interrupt(lineid);
+            exti::EXTI.clear_pending(lineid);
+
+            syscfg::SYSCFG.select_exti_source(self.to_extipin(), syscfg::ExtiPort::PA);
+
+            exti::EXTI.deselect_falling_trigger(lineid);
+            exti::EXTI.deselect_rising_trigger(lineid);
+        }
+    }
+
+    fn set_client(&self, client: &'static dyn hil::gpio::Client) {
+        let index = self.get_pin_number();
+
+        unsafe {
+            EXTI_CLIENTS.client[usize::from(index as u8)].set(client);
+        }
+    }
+
+    fn is_pending(&self) -> bool {
+        // TODO handle errors in lineid conversion
+        let lineid = self.to_lineid();
+        unsafe { exti::EXTI.is_pending(lineid) }
+        // unsafe {
+        //     self.exti_lineid
+        //         .map_or(false, |&mut lineid| exti::EXTI.is_pending(lineid))
+        // }
+    }
+}

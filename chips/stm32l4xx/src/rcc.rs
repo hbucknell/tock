@@ -852,7 +852,7 @@ impl Rcc {
 
     pub fn init(&self) {
         self.registers.apb1enr1.modify(APB1ENR1::PWREN::SET);
-        self.registers.apb2enr.modify(APB2ENR::SYSCFGEN::SET)
+        self.registers.apb2enr.modify(APB2ENR::SYSCFGEN::SET);
     }
 
     // SPI3 clock
