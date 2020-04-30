@@ -12,25 +12,25 @@ use crate::memory_map;
 #[repr(C)]
 struct DbgRegisters {
     /// IDCODE
-    dbgmcu_idcode: ReadOnly<u32, DBGMCU_IDCODE::Register>,
+    idcode: ReadOnly<u32, IDCODE::Register>,
     /// Control Register
-    dbgmcu_cr: ReadWrite<u32, DBGMCU_CR::Register>,
+    cr: ReadWrite<u32, CR::Register>,
     /// Debug MCU APB1 Freeze register 1
-    dbgmcu_apb1fzr1: ReadWrite<u32, DBGMCU_APB1FZR1::Register>,
+    apb1fzr1: ReadWrite<u32, APB1FZR1::Register>,
     /// Debug MCU APB1 Freeze register 2
-    dbgmcu_apb1fzr2: ReadWrite<u32, DBGMCU_APB1FZR2::Register>,
+    apb1fzr2: ReadWrite<u32, APB1FZR2::Register>,
     /// Debug MCU APB2 Freeze register
-    dbgmcu_apb2fzr: ReadWrite<u32, DBGMCU_APB2FZR::Register>,
+    apb2fzr: ReadWrite<u32, APB2FZR::Register>,
 }
 
 register_bitfields![u32,
-    DBGMCU_IDCODE [
+    IDCODE [
         /// DEV_ID
         DEV_ID OFFSET(0) NUMBITS(12) [],
         /// REV_ID
         REV_ID OFFSET(16) NUMBITS(16) []
     ],
-    DBGMCU_CR [
+    CR [
         /// Debug Sleep Mode
         DBG_SLEEP OFFSET(0) NUMBITS(1) [],
         /// Debug Stop Mode
@@ -42,7 +42,7 @@ register_bitfields![u32,
         /// Trace pin assignment control
         TRACE_MODE OFFSET(6) NUMBITS(2) []
     ],
-    DBGMCU_APB1FZR1 [
+    APB1FZR1 [
         /// TIM2 stopped when core is halted
         DBG_TIM2_STOP OFFSET(0) NUMBITS(1) [],
         /// TIM3  stopped when core is halted
@@ -74,13 +74,13 @@ register_bitfields![u32,
         /// LPTIM1 stopped when core is halted
         DBG_LPTIM1_STOP OFFSET(31) NUMBITS(1) []
     ],
-    DBGMCU_APB1FZR2 [
+    APB1FZR2 [
         /// I2C4 stopped when core is halted
         DBG_I2C4_STOP OFFSET(1) NUMBITS(1) [],
         /// LPTIM2 stopped when core is halted
         DBG_LPTIM2_STOP OFFSET(5) NUMBITS(1) []
     ],
-    DBGMCU_APB2FZR [
+    APB2FZR [
         /// TIM1 counter stopped when core is halted
         DBG_TIM1_STOP OFFSET(11) NUMBITS(1) [],
         /// TIM8 counter stopped when core is halted
@@ -115,15 +115,13 @@ impl Dbg {
     /// This should be disabled/not enabled for release builds.
     pub fn enable_low_power_debug(&self) {
         // Enable external debugging during low-power modes
-        self.registers.dbgmcu_cr.modify(DBGMCU_CR::DBG_SLEEP::SET);
-        self.registers.dbgmcu_cr.modify(DBGMCU_CR::DBG_STOP::SET);
-        self.registers.dbgmcu_cr.modify(DBGMCU_CR::DBG_STANDBY::SET);
+        self.registers.cr.modify(CR::DBG_SLEEP::SET);
+        self.registers.cr.modify(CR::DBG_STOP::SET);
+        self.registers.cr.modify(CR::DBG_STANDBY::SET);
     }
 
     /// Freeze TIM2 during breakpoint
     pub fn disable_tim2_counter(&self) {
-        self.registers
-            .dbgmcu_apb1fzr1
-            .modify(DBGMCU_APB1FZR1::DBG_TIM2_STOP::SET);
+        self.registers.apb1fzr1.modify(APB1FZR1::DBG_TIM2_STOP::SET);
     }
 }
