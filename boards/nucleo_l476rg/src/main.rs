@@ -132,8 +132,6 @@ unsafe fn set_pin_primary_functions() {
     // Configure kernel debug gpios as early as possible
     kernel::debug::assign_gpios(Some(&Pin::PA05), None, None);
 
-    // PORT[PortId::A as usize].enable_clock();
-
     // pa02 and pa03 (USART2) is connected to ST-LINK virtual COM port
     // AF7 is USART2_TX
     Pin::PA02.set_mode(Mode::AlternateFunctionMode);
@@ -143,7 +141,7 @@ unsafe fn set_pin_primary_functions() {
     Pin::PA03.set_alternate_function(AlternateFunction::AF7);
     // cortexm4::nvic::Nvic::new(nvic::USART2);
 
-    // ### TODO; Not sure how interrupts will work yet as GPIO is experimental. 
+    // ### TODO; Not sure how interrupts will work yet as GPIO is experimental.
     // button is connected on pc13
     Pin::PC13.set_mode(Mode::Input);
     Pin::PC13.enable_interrupts(hil::gpio::InterruptEdge::FallingEdge);

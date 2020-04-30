@@ -851,218 +851,8 @@ impl Rcc {
     }
 
     pub fn init(&self) {
-        self.registers.apb1enr1.modify(APB1ENR1::PWREN::SET);
-        self.registers.apb2enr.modify(APB2ENR::SYSCFGEN::SET);
-    }
-
-    // SPI3 clock
-
-    fn is_enabled_spi3_clock(&self) -> bool {
-        self.registers.apb1enr1.is_set(APB1ENR1::SPI3EN)
-    }
-
-    fn enable_spi3_clock(&self) {
-        self.registers.apb1enr1.modify(APB1ENR1::SPI3EN::SET)
-    }
-
-    fn disable_spi3_clock(&self) {
-        self.registers.apb1enr1.modify(APB1ENR1::SPI3EN::CLEAR)
-    }
-
-    // TIM2 clock
-
-    fn is_enabled_tim2_clock(&self) -> bool {
-        self.registers.apb1enr1.is_set(APB1ENR1::TIM2EN)
-    }
-
-    fn enable_tim2_clock(&self) {
-        self.registers.apb1enr1.modify(APB1ENR1::TIM2EN::SET)
-    }
-
-    fn disable_tim2_clock(&self) {
-        self.registers.apb1enr1.modify(APB1ENR1::TIM2EN::CLEAR)
-    }
-
-    // SYSCFG clock
-
-    fn is_enabled_syscfg_clock(&self) -> bool {
-        self.registers.apb2enr.is_set(APB2ENR::SYSCFGEN)
-    }
-
-    fn enable_syscfg_clock(&self) {
-        self.registers.apb2enr.modify(APB2ENR::SYSCFGEN::SET)
-    }
-
-    fn disable_syscfg_clock(&self) {
-        self.registers.apb2enr.modify(APB2ENR::SYSCFGEN::CLEAR)
-    }
-
-    // DMA1 clock
-
-    // fn is_enabled_dma1_clock(&self) -> bool {
-    //     self.registers.ahb1enr.is_set(AHB1ENR::DMA1EN)
-    // }
-
-    // fn enable_dma1_clock(&self) {
-    //     self.registers.ahb1enr.modify(AHB1ENR::DMA1EN::SET)
-    // }
-
-    // fn disable_dma1_clock(&self) {
-    //     self.registers.ahb1enr.modify(AHB1ENR::DMA1EN::CLEAR)
-    // }
-
-    // GPIOI clock
-
-    fn is_enabled_gpioi_clock(&self) -> bool {
-        self.registers.ahb2enr.is_set(AHB2ENR::GPIOIEN)
-    }
-
-    fn enable_gpioi_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOIEN::SET)
-    }
-
-    fn disable_gpioi_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOIEN::CLEAR)
-    }
-
-    // GPIOH clock
-
-    fn is_enabled_gpioh_clock(&self) -> bool {
-        self.registers.ahb2enr.is_set(AHB2ENR::GPIOHEN)
-    }
-
-    fn enable_gpioh_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOHEN::SET)
-    }
-
-    fn disable_gpioh_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOHEN::CLEAR)
-    }
-
-    // GPIOG clock
-
-    fn is_enabled_gpiog_clock(&self) -> bool {
-        self.registers.ahb2enr.is_set(AHB2ENR::GPIOGEN)
-    }
-
-    fn enable_gpiog_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOGEN::SET)
-    }
-
-    fn disable_gpiog_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOGEN::CLEAR)
-    }
-
-    // GPIOF clock
-
-    fn is_enabled_gpiof_clock(&self) -> bool {
-        self.registers.ahb2enr.is_set(AHB2ENR::GPIOFEN)
-    }
-
-    fn enable_gpiof_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOFEN::SET)
-    }
-
-    fn disable_gpiof_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOFEN::CLEAR)
-    }
-
-    // GPIOE clock
-
-    fn is_enabled_gpioe_clock(&self) -> bool {
-        self.registers.ahb2enr.is_set(AHB2ENR::GPIOEEN)
-    }
-
-    fn enable_gpioe_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOEEN::SET)
-    }
-
-    fn disable_gpioe_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOEEN::CLEAR)
-    }
-
-    // GPIOD clock
-
-    fn is_enabled_gpiod_clock(&self) -> bool {
-        self.registers.ahb2enr.is_set(AHB2ENR::GPIODEN)
-    }
-
-    fn enable_gpiod_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIODEN::SET)
-    }
-
-    fn disable_gpiod_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIODEN::CLEAR)
-    }
-
-    // GPIOC clock
-
-    fn is_enabled_gpioc_clock(&self) -> bool {
-        self.registers.ahb2enr.is_set(AHB2ENR::GPIOCEN)
-    }
-
-    fn enable_gpioc_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOCEN::SET)
-    }
-
-    fn disable_gpioc_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOCEN::CLEAR)
-    }
-
-    // GPIOB clock
-
-    fn is_enabled_gpiob_clock(&self) -> bool {
-        self.registers.ahb2enr.is_set(AHB2ENR::GPIOBEN)
-    }
-
-    fn enable_gpiob_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOBEN::SET)
-    }
-
-    fn disable_gpiob_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOBEN::CLEAR)
-    }
-
-    // GPIOA clock
-
-    fn is_enabled_gpioa_clock(&self) -> bool {
-        self.registers.ahb2enr.is_set(AHB2ENR::GPIOAEN)
-    }
-
-    fn enable_gpioa_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOAEN::SET)
-    }
-
-    fn disable_gpioa_clock(&self) {
-        self.registers.ahb2enr.modify(AHB2ENR::GPIOAEN::CLEAR)
-    }
-
-    // USART2 clock
-
-    fn is_enabled_usart2_clock(&self) -> bool {
-        self.registers.apb1enr1.is_set(APB1ENR1::USART2EN)
-    }
-
-    fn enable_usart2_clock(&self) {
-        self.registers.apb1enr1.modify(APB1ENR1::USART2EN::SET)
-    }
-
-    fn disable_usart2_clock(&self) {
-        self.registers.apb1enr1.modify(APB1ENR1::USART2EN::CLEAR)
-    }
-
-    // USART3 clock
-
-    fn is_enabled_usart3_clock(&self) -> bool {
-        self.registers.apb1enr1.is_set(APB1ENR1::USART3EN)
-    }
-
-    fn enable_usart3_clock(&self) {
-        self.registers.apb1enr1.modify(APB1ENR1::USART3EN::SET)
-    }
-
-    fn disable_usart3_clock(&self) {
-        self.registers.apb1enr1.modify(APB1ENR1::USART3EN::CLEAR)
+        PeripheralClock::APB1(PCLK1_1::PWR).enable();
+        PeripheralClock::APB2(PCLK2::SYSCFG).enable();
     }
 }
 
@@ -1187,15 +977,15 @@ impl ClockInterface for PeripheralClock {
                 _ => false,
             },
             &PeripheralClock::AHB2(ref v) => match v {
-                HCLK2::GPIOI => unsafe { RCC.is_enabled_gpioi_clock() },
-                HCLK2::GPIOH => unsafe { RCC.is_enabled_gpioh_clock() },
-                HCLK2::GPIOG => unsafe { RCC.is_enabled_gpiog_clock() },
-                HCLK2::GPIOF => unsafe { RCC.is_enabled_gpiof_clock() },
-                HCLK2::GPIOE => unsafe { RCC.is_enabled_gpioe_clock() },
-                HCLK2::GPIOD => unsafe { RCC.is_enabled_gpiod_clock() },
-                HCLK2::GPIOC => unsafe { RCC.is_enabled_gpioc_clock() },
-                HCLK2::GPIOB => unsafe { RCC.is_enabled_gpiob_clock() },
-                HCLK2::GPIOA => unsafe { RCC.is_enabled_gpioa_clock() },
+                HCLK2::GPIOA => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::GPIOAEN) },
+                HCLK2::GPIOB => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::GPIOBEN) },
+                HCLK2::GPIOC => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::GPIOCEN) },
+                HCLK2::GPIOD => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::GPIODEN) },
+                HCLK2::GPIOE => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::GPIOEEN) },
+                HCLK2::GPIOF => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::GPIOFEN) },
+                HCLK2::GPIOG => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::GPIOGEN) },
+                HCLK2::GPIOH => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::GPIOHEN) },
+                HCLK2::GPIOI => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::GPIOIEN) },
 
                 HCLK2::OTGFSEN => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::OTGFSEN) },
                 HCLK2::ADC => unsafe { RCC.registers.ahb2enr.is_set(AHB2ENR::ADCEN) },
@@ -1209,12 +999,8 @@ impl ClockInterface for PeripheralClock {
                 _ => false,
             },
             &PeripheralClock::APB1(ref v) => match v {
-                // PCLK1_1::TIM2 => unsafe { RCC.is_enabled_tim2_clock() },
-                // PCLK1_1::USART2 => unsafe { RCC.is_enabled_usart2_clock() },
-                // PCLK1_1::USART3 => unsafe { RCC.is_enabled_usart3_clock() },
-                // PCLK1_1::SPI3 => unsafe { RCC.is_enabled_spi3_clock() },
                 // pclk1_1
-                PCLK1_1::TIM2 => unsafe { RCC.is_enabled_tim2_clock() },
+                PCLK1_1::TIM2 => unsafe { RCC.registers.apb1enr1.is_set(APB1ENR1::TIM2EN) },
                 PCLK1_1::TIM3 => unsafe { RCC.registers.apb1enr1.is_set(APB1ENR1::TIM3EN) },
                 PCLK1_1::TIM4 => unsafe { RCC.registers.apb1enr1.is_set(APB1ENR1::TIM4EN) },
                 PCLK1_1::TIM5 => unsafe { RCC.registers.apb1enr1.is_set(APB1ENR1::TIM5EN) },
@@ -1241,7 +1027,6 @@ impl ClockInterface for PeripheralClock {
                 PCLK1_1::LPTIM1 => unsafe { RCC.registers.apb1enr1.is_set(APB1ENR1::LPTIM1EN) },
             },
             &PeripheralClock::APB2(ref v) => match v {
-                // PCLK2::SYSCFG => unsafe { RCC.is_enabled_syscfg_clock() },
                 PCLK2::SYSCFG => unsafe { RCC.registers.apb2enr.is_set(APB2ENR::SYSCFGEN) },
                 PCLK2::FW => unsafe { RCC.registers.apb2enr.is_set(APB2ENR::FWEN) },
                 PCLK2::SDMMC1 => unsafe { RCC.registers.apb2enr.is_set(APB2ENR::SDMMC1EN) },
@@ -1266,32 +1051,32 @@ impl ClockInterface for PeripheralClock {
                 _ => {}
             },
             &PeripheralClock::AHB2(ref v) => match v {
-                HCLK2::GPIOI => unsafe {
-                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOIEN::SET);
-                },
-                HCLK2::GPIOH => unsafe {
-                    RCC.enable_gpioh_clock();
-                },
-                HCLK2::GPIOG => unsafe {
-                    RCC.enable_gpiog_clock();
-                },
-                HCLK2::GPIOF => unsafe {
-                    RCC.enable_gpiof_clock();
-                },
-                HCLK2::GPIOE => unsafe {
-                    RCC.enable_gpioe_clock();
-                },
-                HCLK2::GPIOD => unsafe {
-                    RCC.enable_gpiod_clock();
-                },
-                HCLK2::GPIOC => unsafe {
-                    RCC.enable_gpioc_clock();
+                HCLK2::GPIOA => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOAEN::SET);
                 },
                 HCLK2::GPIOB => unsafe {
-                    RCC.enable_gpiob_clock();
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOBEN::SET);
                 },
-                HCLK2::GPIOA => unsafe {
-                    RCC.enable_gpioa_clock();
+                HCLK2::GPIOC => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOCEN::SET);
+                },
+                HCLK2::GPIOD => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIODEN::SET);
+                },
+                HCLK2::GPIOE => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOEEN::SET);
+                },
+                HCLK2::GPIOF => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOFEN::SET);
+                },
+                HCLK2::GPIOG => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOGEN::SET);
+                },
+                HCLK2::GPIOH => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOHEN::SET);
+                },
+                HCLK2::GPIOI => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOIEN::SET);
                 },
 
                 HCLK2::OTGFSEN => unsafe { RCC.registers.ahb2enr.modify(AHB2ENR::OTGFSEN::SET) },
@@ -1306,12 +1091,10 @@ impl ClockInterface for PeripheralClock {
                 _ => {}
             },
             &PeripheralClock::APB1(ref v) => match v {
-                // PCLK1_1::TIM2 => unsafe { RCC.is_enabled_tim2_clock() },
-                // PCLK1_1::USART2 => unsafe { RCC.is_enabled_usart2_clock() },
-                // PCLK1_1::USART3 => unsafe { RCC.is_enabled_usart3_clock() },
-                // PCLK1_1::SPI3 => unsafe { RCC.is_enabled_spi3_clock() },
                 // pclk1_1
-                PCLK1_1::TIM2 => unsafe { RCC.enable_tim2_clock() },
+                PCLK1_1::TIM2 => unsafe {
+                    RCC.registers.apb1enr1.modify(APB1ENR1::TIM2EN::SET);
+                },
                 PCLK1_1::TIM3 => unsafe {
                     RCC.registers.apb1enr1.modify(APB1ENR1::TIM3EN::SET);
                 },
@@ -1433,52 +1216,50 @@ impl ClockInterface for PeripheralClock {
                 _ => {}
             },
             &PeripheralClock::AHB2(ref v) => match v {
-                HCLK2::GPIOI => unsafe {
-                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOIEN::SET);
-                },
-                HCLK2::GPIOH => unsafe {
-                    RCC.enable_gpioh_clock();
-                },
-                HCLK2::GPIOG => unsafe {
-                    RCC.enable_gpiog_clock();
-                },
-                HCLK2::GPIOF => unsafe {
-                    RCC.enable_gpiof_clock();
-                },
-                HCLK2::GPIOE => unsafe {
-                    RCC.enable_gpioe_clock();
-                },
-                HCLK2::GPIOD => unsafe {
-                    RCC.enable_gpiod_clock();
-                },
-                HCLK2::GPIOC => unsafe {
-                    RCC.enable_gpioc_clock();
+                HCLK2::GPIOA => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOAEN::CLEAR);
                 },
                 HCLK2::GPIOB => unsafe {
-                    RCC.enable_gpiob_clock();
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOBEN::CLEAR);
                 },
-                HCLK2::GPIOA => unsafe {
-                    RCC.enable_gpioa_clock();
+                HCLK2::GPIOC => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOCEN::CLEAR);
+                },
+                HCLK2::GPIOD => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIODEN::CLEAR);
+                },
+                HCLK2::GPIOE => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOEEN::CLEAR);
+                },
+                HCLK2::GPIOF => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOFEN::CLEAR);
+                },
+                HCLK2::GPIOG => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOGEN::CLEAR);
+                },
+                HCLK2::GPIOH => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOHEN::CLEAR);
+                },
+                HCLK2::GPIOI => unsafe {
+                    RCC.registers.ahb2enr.modify(AHB2ENR::GPIOIEN::CLEAR);
                 },
 
-                HCLK2::OTGFSEN => unsafe { RCC.registers.ahb2enr.modify(AHB2ENR::OTGFSEN::SET) },
-                HCLK2::ADC => unsafe { RCC.registers.ahb2enr.modify(AHB2ENR::ADCEN::SET) },
-                HCLK2::DCMI => unsafe { RCC.registers.ahb2enr.modify(AHB2ENR::DCMIEN::SET) },
+                HCLK2::OTGFSEN => unsafe { RCC.registers.ahb2enr.modify(AHB2ENR::OTGFSEN::CLEAR) },
+                HCLK2::ADC => unsafe { RCC.registers.ahb2enr.modify(AHB2ENR::ADCEN::CLEAR) },
+                HCLK2::DCMI => unsafe { RCC.registers.ahb2enr.modify(AHB2ENR::DCMIEN::CLEAR) },
                 // HCLK2::AES => {unsafe { }, RESERVED FOR STM32L47x/L49x
                 // HCLK2::HASH => unsafe { }, RESERVED FOR STM32L47x/L48x
-                HCLK2::RNG => unsafe { RCC.registers.ahb2enr.modify(AHB2ENR::RNGEN::SET) },
+                HCLK2::RNG => unsafe { RCC.registers.ahb2enr.modify(AHB2ENR::RNGEN::CLEAR) },
             },
             &PeripheralClock::AHB3(ref v) => match v {
                 // TODO
                 _ => {}
             },
             &PeripheralClock::APB1(ref v) => match v {
-                // PCLK1_1::TIM2 => unsafe { RCC.is_enabled_tim2_clock() },
-                // PCLK1_1::USART2 => unsafe { RCC.is_enabled_usart2_clock() },
-                // PCLK1_1::USART3 => unsafe { RCC.is_enabled_usart3_clock() },
-                // PCLK1_1::SPI3 => unsafe { RCC.is_enabled_spi3_clock() },
                 // pclk1_1
-                PCLK1_1::TIM2 => unsafe { RCC.disable_tim2_clock() },
+                PCLK1_1::TIM2 => unsafe {
+                    RCC.registers.apb1enr1.modify(APB1ENR1::TIM2EN::CLEAR);
+                },
                 PCLK1_1::TIM3 => unsafe {
                     RCC.registers.apb1enr1.modify(APB1ENR1::TIM3EN::CLEAR);
                 },

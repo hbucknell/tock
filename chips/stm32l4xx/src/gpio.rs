@@ -12,9 +12,9 @@ use enum_primitive::enum_from_primitive;
 use kernel::common::cells::OptionalCell;
 use kernel::common::registers::{register_bitfields, ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
+use kernel::debug;
 use kernel::hil;
 use kernel::ClockInterface;
-use kernel::debug;
 
 use crate::exti;
 use crate::memory_map;
@@ -766,103 +766,107 @@ pub static mut PIN: [Option<GpioPin>; 16 * 8] = [
     Some(GpioPin::new(GPIOC_REGS, 14)),
     Some(GpioPin::new(GPIOC_REGS, 15)),
     // Port D
-    None,   // 00
-    None,   // 01
+    None, // 00
+    None, // 01
     Some(GpioPin::new(GPIOD_REGS, 02)),
-    None,   // 03
-    None,   // 04
-    None,   // 05
-    None,   // 06
-    None,   // 07
-    None,   // 08
-    None,   // 09
-    None,   // 10
-    None,   // 11
-    None,   // 12
-    None,   // 13
-    None,   // 14
-    None,   // 15
-    
+    None, // 03
+    None, // 04
+    None, // 05
+    None, // 06
+    None, // 07
+    None, // 08
+    None, // 09
+    None, // 10
+    None, // 11
+    None, // 12
+    None, // 13
+    None, // 14
+    None, // 15
     // Port E
-    None,   // 00
-    None,   // 01
-    None,   // 02
-    None,   // 03
-    None,   // 04
-    None,   // 05
-    None,   // 06
-    None,   // 07
-    None,   // 08
-    None,   // 09
-    None,   // 10
-    None,   // 11
-    None,   // 12
-    None,   // 13
-    None,   // 14
-    None,   // 15
-    
+    None, // 00
+    None, // 01
+    None, // 02
+    None, // 03
+    None, // 04
+    None, // 05
+    None, // 06
+    None, // 07
+    None, // 08
+    None, // 09
+    None, // 10
+    None, // 11
+    None, // 12
+    None, // 13
+    None, // 14
+    None, // 15
     // Port F
-    None,   // 00
-    None,   // 01
-    None,   // 02
-    None,   // 03
-    None,   // 04
-    None,   // 05
-    None,   // 06
-    None,   // 07
-    None,   // 08
-    None,   // 09
-    None,   // 10
-    None,   // 11
-    None,   // 12
-    None,   // 13
-    None,   // 14
-    None,   // 15
-    
+    None, // 00
+    None, // 01
+    None, // 02
+    None, // 03
+    None, // 04
+    None, // 05
+    None, // 06
+    None, // 07
+    None, // 08
+    None, // 09
+    None, // 10
+    None, // 11
+    None, // 12
+    None, // 13
+    None, // 14
+    None, // 15
     // Port G
-    None,   // 00
-    None,   // 01
-    None,   // 02
-    None,   // 03
-    None,   // 04
-    None,   // 05
-    None,   // 06
-    None,   // 07
-    None,   // 08
-    None,   // 09
-    None,   // 10
-    None,   // 11
-    None,   // 12
-    None,   // 13
-    None,   // 14
-    None,   // 15
-    
+    None, // 00
+    None, // 01
+    None, // 02
+    None, // 03
+    None, // 04
+    None, // 05
+    None, // 06
+    None, // 07
+    None, // 08
+    None, // 09
+    None, // 10
+    None, // 11
+    None, // 12
+    None, // 13
+    None, // 14
+    None, // 15
     // Port H
     Some(GpioPin::new(GPIOH_REGS, 0)),
     Some(GpioPin::new(GPIOH_REGS, 1)),
-    None,   // 02
-    None,   // 03
-    None,   // 04
-    None,   // 05
-    None,   // 06
-    None,   // 07
-    None,   // 08
-    None,   // 09
-    None,   // 10
-    None,   // 11
-    None,   // 12
-    None,   // 13
-    None,   // 14
-    None,   // 15
+    None, // 02
+    None, // 03
+    None, // 04
+    None, // 05
+    None, // 06
+    None, // 07
+    None, // 08
+    None, // 09
+    None, // 10
+    None, // 11
+    None, // 12
+    None, // 13
+    None, // 14
+    None, // 15
 ];
 
 impl Pin {
     fn get_pin(&self) -> &GpioPin {
-        unsafe { match PIN[usize::from_u32(*self as u32).unwrap()] {
-            None => { panic!("get_pin: NOT found other"); },
-            _ => {},
-        }; }
-        unsafe { &PIN[usize::from_u32(*self as u32).unwrap()].as_ref().unwrap() }
+        unsafe {
+            match PIN[usize::from_u32(*self as u32).unwrap()] {
+                None => {
+                    panic!("get_pin: NOT found other");
+                }
+                _ => {}
+            };
+        }
+        unsafe {
+            &PIN[usize::from_u32(*self as u32).unwrap()]
+                .as_ref()
+                .unwrap()
+        }
     }
 
     // pub fn get_pin_mut(&self) -> &mut GpioPin {
@@ -947,20 +951,6 @@ pub static mut PORT: [Port; 8] = [
         clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOH),
     },
 ];
-
-// impl Port {
-//     pub fn is_enabled_clock(&self) -> bool {
-//         self.clock.is_enabled()
-//     }
-
-//     pub fn enable_clock(&self) {
-//         self.clock.enable();
-//     }
-
-//     pub fn disable_clock(&self) {
-//         self.clock.disable();
-//     }
-// }
 
 impl Pin {
     // pub fn set_client(&self, client: &'a dyn hil::gpio::Client) {

@@ -398,18 +398,6 @@ impl Usart<'a> {
         }
     }
 
-    fn is_enabled_clock(&self) -> bool {
-        self.clock.is_enabled()
-    }
-
-    fn enable_clock(&self) {
-        self.clock.enable();
-    }
-
-    fn disable_clock(&self) {
-        self.clock.disable();
-    }
-
     // pub fn set_dma(&self, tx_dma: TxDMA<'a>, rx_dma: RxDMA<'a>) {
     //     self.tx_dma.set(tx_dma.0);
     //     self.rx_dma.set(rx_dma.0);
@@ -701,7 +689,7 @@ impl hil::uart::Configure for Usart<'a> {
             );
         }
 
-        self.enable_clock();
+        self.clock.enable();
 
         if self.registers.cr1.is_set(CR1::UE) {
             // while !self.registers.isr.is_set(ISR::TXE) {}
