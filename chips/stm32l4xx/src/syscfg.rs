@@ -275,7 +275,6 @@ impl Syscfg {
                 .registers
                 .exticr4
                 .modify(EXTICR4::EXTI15.val(port as u32)),
-            _ => {}
         }
     }
 

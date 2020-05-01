@@ -421,7 +421,7 @@ impl Usart<'a> {
         {
             use hil::uart::Error;
             // Error has occured, handle appropriately
-            let error: Error = Error::None;
+            let _error: Error = Error::None;
         } else {
             // No errors,
             // Process receive data
@@ -644,9 +644,9 @@ impl Usart<'a> {
             //     rx_dma.abort_transfer()
             // });
 
-            // Get client data
-            let buffer = self.rx_buffer.take();
-            let count = self.tx_count.unwrap_or(0);
+            // // Get client data
+            // let buffer = self.rx_buffer.take();
+            // let count = self.tx_count.unwrap_or(0);
             self.rx_len.set(0);
             self.tx_count.set(0);
         } else {

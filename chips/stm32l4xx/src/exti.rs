@@ -3,15 +3,15 @@
 //! Handles generation, masking, rising/falling selection, status
 //! and software emulation of event/interrupt requests,
 
-use cortexm4::support::atomic;
+// use cortexm4::support::atomic;
 use enum_primitive::cast::FromPrimitive;
 use enum_primitive::enum_from_primitive;
-use kernel::common::cells::OptionalCell;
+// use kernel::common::cells::OptionalCell;
 use kernel::common::registers::{register_bitfields, ReadWrite};
 use kernel::common::StaticRef;
-use kernel::hil;
+// use kernel::hil;
 
-use crate::gpio;
+// use crate::gpio;
 use crate::memory_map;
 
 /// External interrupt/event controller
@@ -588,7 +588,6 @@ impl Exti {
             LineId::Exti13 => self.registers.imr1.modify(IMR1::IM13::CLEAR),
             LineId::Exti14 => self.registers.imr1.modify(IMR1::IM14::CLEAR),
             LineId::Exti15 => self.registers.imr1.modify(IMR1::IM15::CLEAR),
-            _ => {}
         }
     }
 
@@ -742,11 +741,10 @@ impl Exti {
     }
 
     pub fn handle_exti_lines(&self, mask: u32) -> u32 {
-        let mut active: u32 = 0;
-
         // `EXTI_PR1/2` is a read/clear write 1 register (`rc_w1`).
         // Read the `EXTI_PR` register and then write the value of `exti_pr` back.
-        active = self.registers.pr1.get() & mask;
+        let active: u32 = self.registers.pr1.get() & mask;
+
         self.registers.pr1.set(active);
         active
     }

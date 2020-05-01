@@ -8,11 +8,12 @@
 #![feature(asm)]
 #![deny(missing_docs)]
 
-use capsules::virtual_alarm::VirtualMuxAlarm;
-use components::gpio::GpioComponent;
+// use capsules::virtual_alarm::VirtualMuxAlarm;
+// use components::gpio::GpioComponent;
 use kernel::capabilities;
 use kernel::common::dynamic_deferred_call::{DynamicDeferredCall, DynamicDeferredCallClientState};
 use kernel::component::Component;
+use kernel::debug_gpio;
 use kernel::Platform;
 use kernel::{create_capability, debug, static_init};
 
@@ -82,31 +83,31 @@ impl Platform for NucleoL476RG {
     }
 }
 
-/// Helper function called during bring-up that configures DMA.
-unsafe fn setup_dma() {
-    // // use stm32l4xx::dma1::{Dma1Peripheral, DMA1};
-    // use stm32l4xx::usart;
-    // use stm32l4xx::usart::USART3;
+// /// Helper function called during bring-up that configures DMA.
+// unsafe fn setup_dma() {
+//     // // use stm32l4xx::dma1::{Dma1Peripheral, DMA1};
+//     // use stm32l4xx::usart;
+//     // use stm32l4xx::usart::USART3;
 
-    // DMA1.enable_clock();
+//     // DMA1.enable_clock();
 
-    // let usart3_tx_stream = Dma1Peripheral::USART3_TX.get_stream();
-    // let usart3_rx_stream = Dma1Peripheral::USART3_RX.get_stream();
+//     // let usart3_tx_stream = Dma1Peripheral::USART3_TX.get_stream();
+//     // let usart3_rx_stream = Dma1Peripheral::USART3_RX.get_stream();
 
-    // USART3.set_dma(
-    //     usart::TxDMA(usart3_tx_stream),
-    //     usart::RxDMA(usart3_rx_stream),
-    // );
+//     // USART3.set_dma(
+//     //     usart::TxDMA(usart3_tx_stream),
+//     //     usart::RxDMA(usart3_rx_stream),
+//     // );
 
-    // usart3_tx_stream.set_client(&USART3);
-    // usart3_rx_stream.set_client(&USART3);
+//     // usart3_tx_stream.set_client(&USART3);
+//     // usart3_rx_stream.set_client(&USART3);
 
-    // usart3_tx_stream.setup(Dma1Peripheral::USART3_TX);
-    // usart3_rx_stream.setup(Dma1Peripheral::USART3_RX);
+//     // usart3_tx_stream.setup(Dma1Peripheral::USART3_TX);
+//     // usart3_rx_stream.setup(Dma1Peripheral::USART3_RX);
 
-    // cortexm4::nvic::Nvic::new(Dma1Peripheral::USART3_TX.get_stream_irqn()).enable();
-    // cortexm4::nvic::Nvic::new(Dma1Peripheral::USART3_RX.get_stream_irqn()).enable();
-}
+//     // cortexm4::nvic::Nvic::new(Dma1Peripheral::USART3_TX.get_stream_irqn()).enable();
+//     // cortexm4::nvic::Nvic::new(Dma1Peripheral::USART3_RX.get_stream_irqn()).enable();
+// }
 
 /// Helper function called during bring-up that configures multiplexed I/O.
 unsafe fn set_pin_primary_functions() {
@@ -134,10 +135,10 @@ unsafe fn set_pin_primary_functions() {
 
     // pa02 and pa03 (USART2) is connected to ST-LINK virtual COM port
     // AF7 is USART2_TX
-    Pin::PA02.set_mode(Mode::AlternateFunctionMode);
+    Pin::PA02.set_mode(Mode::AlternateFunction);
     Pin::PA02.set_alternate_function(AlternateFunction::AF7);
     // AF7 is USART2_RX
-    Pin::PA03.set_mode(Mode::AlternateFunctionMode);
+    Pin::PA03.set_mode(Mode::AlternateFunction);
     Pin::PA03.set_alternate_function(AlternateFunction::AF7);
     // cortexm4::nvic::Nvic::new(nvic::USART2);
 
@@ -223,7 +224,7 @@ pub unsafe fn reset_handler() {
 
     const HELLO: &str = "hello-\r\n";
     debug!("{}", HELLO);
-    // debug_verbose!(HELLO);
+    debug_gpio!(0, set);
 
     // // WARNING: this should panic, as pin does not exist
     // stm32l4xx::gpio::Pin::PD07.get_mode();
