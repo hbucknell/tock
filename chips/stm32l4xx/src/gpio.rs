@@ -3,10 +3,8 @@
 //! Handles configuration and use of GPIOs
 //!
 //! TODO:
-//! - Add speed control API
+//! - Add lock feature
 
-// use cortexm4;
-// use cortexm4::support::atomic;
 use enum_primitive::cast::FromPrimitive;
 use enum_primitive::enum_from_primitive;
 use kernel::common::cells::OptionalCell;
@@ -26,7 +24,7 @@ use crate::syscfg;
 struct GpioRegisters {
     /// GPIO port mode register
     moder: ReadWrite<u32, MODER::Register>,
-    /// GPIO port output type register
+    /// GPIO port output (PP/OD) type register
     otyper: ReadWrite<u32, OTYPER::Register>,
     /// GPIO port output speed register
     ospeedr: ReadWrite<u32, OSPEEDR::Register>,
@@ -47,7 +45,7 @@ struct GpioRegisters {
     /// GPIO Bit Reset function high register
     brr: WriteOnly<u32, AFRH::Register>,
     /// GPIO analog switch control function high register
-    ascr: ReadWrite<u32, AFRH::Register>,
+    ascr: ReadWrite<u32, ASCR::Register>,
 }
 
 register_bitfields![u32,
@@ -487,44 +485,99 @@ const GPIOB_REGS: StaticRef<GpioRegisters> =
 const GPIOA_REGS: StaticRef<GpioRegisters> =
     unsafe { StaticRef::new(memory_map::GPIOA_BASE as *const GpioRegisters) };
 
-/// STM32F446RE has eight GPIO ports labeled from A-H [^1]. This is represented
-/// by three bits.
-///
-/// [^1]: Figure 3. STM32F446xC/E block diagram, page 16 of the datasheet
-// #[repr(u32)]
-// pub enum PortId {
-//     A = 0b000,
-//     B = 0b001,
-//     C = 0b010,
-//     D = 0b011,
-//     E = 0b100,
-//     F = 0b101,
-//     G = 0b110,
-//     H = 0b111,
-// }
+/// Mask applied to 'Pin' enum to extract the pin number
+const PIN_NUMBER_MASK: usize = 0x0F;
+/// Mask applied to 'Pin' enum to extract the port number
+const PORT_NUMBER_MASK: usize = 0xF0;
+/// Shift bits applied to 'Pin' enum to extract the port number
+const PORT_NUMBER_SHIFT: usize = 4;
 
-/// GPIO pin mode [^1]
-///
-/// [^1]: Section 7.1.4, page 187 of reference manual
+/// GPIO pin mode
+enum_from_primitive! {
+    #[repr(u32)]
+    #[derive(PartialEq)]
+    pub enum PinNumber {
+        PIN0,
+        PIN1,
+        PIN2,
+        PIN3,
+        PIN4,
+        PIN5,
+        PIN6,
+        PIN7,
+        PIN8,
+        PIN9,
+        PIN10,
+        PIN11,
+        PIN12,
+        PIN13,
+        PIN14,
+        PIN15,
+    }
+}
+
+/// GPIO pin mode
 enum_from_primitive! {
     #[repr(u32)]
     #[derive(PartialEq)]
     pub enum Mode {
         Input = 0b00,
-        GeneralPurposeOutputMode = 0b01,
-        AlternateFunctionMode = 0b10,
-        AnalogMode = 0b11,
+        Output = 0b01,
+        AlternateFunction = 0b10,
+        Analog = 0b11,
+    }
+}
+
+/// GPIO output pin type (PP/OD)
+enum_from_primitive! {
+    #[repr(u32)]
+    #[derive(PartialEq)]
+    pub enum Type {
+        PushPull = 0b0,
+        OpenDrain = 0b1,
+    }
+}
+
+/// GPIO pin speed for outputs
+enum_from_primitive! {
+    #[repr(u32)]
+    #[derive(PartialEq)]
+    pub enum Speed {
+        Low = 0b00,
+        Medium = 0b01,
+        High = 0b10,
+        VeryHigh = 0b11,
+    }
+}
+
+/// GPIO pin internal pull-up and pull-down
+enum_from_primitive! {
+    #[repr(u32)]
+    enum PullUpPullDown {
+        NoPullUpPullDown = 0b00,
+        PullUp = 0b01,
+        PullDown = 0b10,
+    }
+}
+
+/// GPIO output pin type (PP/OD)
+enum_from_primitive! {
+    #[repr(u32)]
+    #[derive(PartialEq)]
+    pub enum Analog {
+        Disconnect = 0b0,
+        Connect = 0b1,
     }
 }
 
 /// Alternate functions that may be assigned to a `Pin`.
 ///
-/// GPIO pins on the STM32F446RE may serve multiple functions. In addition to
+/// GPIO pins on the STM32L4xx may serve multiple functions. In addition to
 /// the default functionality, each pin can be assigned up to sixteen different
 /// alternate functions. The various functions for each pin are described in
-/// "Alternate Function"" section of the STM32F446RE datasheet[^1].
+/// "Alternate Function" section of the STM32F446RE datasheet[^1].
 ///
-/// Alternate Function bit mapping is shown here[^2].
+/// Alternate Function bit mapping is shown here.
 ///
 /// [^1]: Section 4, Pinout and pin description, Table 11. Alternate function,
 ///       pages 59-66
@@ -565,28 +618,17 @@ const EXTI9_5_MASK: u32 = 0x000003E0;
 /// Pin mask for handling EXTI 15-10 IRQ
 const EXTI15_10_MASK: u32 = 0x0000FC00;
 
-/// GPIO pin internal pull-up and pull-down [^1]
+/// Name of the GPIO pins on the STM32L4xx.
 ///
-/// [^1]: Section 7.4.4, page 189 of reference manual
-enum_from_primitive! {
-    #[repr(u32)]
-    enum PullUpPullDown {
-        NoPullUpPullDown = 0b00,
-        PullUp = 0b01,
-        PullDown = 0b10,
-    }
-}
-
-/// Name of the GPIO pin on the STM32F446RE.
+/// This 'Pin' enum must map correctly against the GpioPin table 'PIN'. 
+/// Maybe a macro could help ensure this in future...
+/// 
+/// This 'Pin' enum describes the maximum pin count that can be handled by 
+/// register interface. Whereas the 'PIN' (GpioPin[]) maps from 'Pin' to
+/// the actual pins present on this package (LQFP64).
 ///
-/// The "Pinout and pin description" section [^1] of the STM32F446RE datasheet
-/// shows the mapping between the names and the hardware pins on different chip
-/// packages.
-///
-/// The first three bits represent the port and last four bits represent the
-/// pin.
-///
-/// [^1]: Section 4, Pinout and pin description, pages 41-45
+/// The lower four bits represent the pin number within the Port, Pins[15..0].
+/// The upper three/four bits (7..4) represent the port number, Ports[0..7] -> Ports[A..H].
 #[rustfmt::skip]
 #[repr(u8)]
 #[derive(Copy, Clone)]
@@ -639,11 +681,10 @@ pub enum Pin {
     // PI12, PI13, PI14, PI15,
 }
 
-// Active Pin to carry out operations on
+/// Active Pin to carry out operations on
 pub struct GpioPin {
     registers: StaticRef<GpioRegisters>,
     mask: u32,
-    // exti_lineid: OptionalCell<exti::LineId>,
 }
 
 impl GpioPin {
@@ -655,6 +696,7 @@ impl GpioPin {
     }
 }
 
+/// The STM32L4xx family GPIO interrupt hanlding is somewhat complex.
 struct ExtiClients {
     client: [OptionalCell<&'static dyn hil::gpio::Client>; 16],
 }
@@ -686,33 +728,58 @@ impl ExtiClients {
     }
 }
 
-// macro_rules! declare_gpio_pins {
-//     ($($pin:ident)*) => {
-//         [
-//             $(Some(Pin::new(GpioPin::$pin)), )*
-//         ]
-//     }
-// }
+pub struct Port {
+    registers: StaticRef<GpioRegisters>,
+    clock: rcc::PeripheralClock,
+}
 
-// macro_rules! declare_gpio_pins {
-//     ($($pin:ident)*) => {
-//         [
-//             match (*$pin as usize & 0xf0) >> 4 {
-//                 0 => $(Some(Pin::new(GPIOA_REGS, 1 << (GpioPin::$pin as usize & 0x0f))), )*,
-//                 _ => $(Some(Pin::new(GPIOA_REGS, 1 << (GpioPin::$pin as usize & 0x0f))), )*,
-//             }
-//         ]
-//     }
-// }
+/// GPIO Port table
+pub static mut PORT: [Port; 8] = [
+    Port {
+        registers: GPIOA_REGS,
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOA),
+    },
+    Port {
+        registers: GPIOB_REGS,
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOB),
+    },
+    Port {
+        registers: GPIOC_REGS,
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOC),
+    },
+    Port {
+        registers: GPIOD_REGS,
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOD),
+    },
+    Port {
+        registers: GPIOE_REGS,
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOE),
+    },
+    Port {
+        registers: GPIOF_REGS,
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOF),
+    },
+    Port {
+        registers: GPIOG_REGS,
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOG),
+    },
+    Port {
+        registers: GPIOH_REGS,
+        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOH),
+    },
+];
 
-// macro_rules! declare_gpio_pin {
-//     ($($pin:ident)*) => {
-//         $(Some(Pin::new(PORT[(GpioPin::$pin as usize & 0xf0) >> 4].registers, 1 << (GpioPin::$pin as usize & 0x0f))) )*
-//     }
-// }
-
-// We need to use `Option<Pin>`, instead of just `Pin` because GPIOH has
-// only two pins - PH00 and PH01, rather than the usual sixteen pins.
+/// Name of the GPIO pins actually present on package of LQFP64.
+///
+/// The 'Pin' enum must map correctly against the GpioPin table 'PIN'.
+/// Maybe a macro could help ensure this in future...
+///
+/// The 'Pin' enum describes the maximum pin count that can be handled by
+/// register interface. Whereas the 'PIN' (GpioPin[]) maps from 'Pin' to
+/// the actual pins present on this package (LQFP64).
+///
+/// We need to use `Option<GpioPin>`, instead of just `GpioPin` so that there
+/// is a mpping between what the registers can handle and what pins are present.
 pub static mut PIN: [Option<GpioPin>; 16 * 8] = [
     // Port A
     Some(GpioPin::new(GPIOA_REGS, 00)),
@@ -853,252 +920,384 @@ pub static mut PIN: [Option<GpioPin>; 16 * 8] = [
 ];
 
 impl Pin {
-    fn get_pin(&self) -> &GpioPin {
-        unsafe {
-            match PIN[usize::from_u32(*self as u32).unwrap()] {
-                None => {
-                    panic!("get_pin: NOT found other");
-                }
-                _ => {}
-            };
-        }
-        unsafe {
-            &PIN[usize::from_u32(*self as u32).unwrap()]
-                .as_ref()
-                .unwrap()
-        }
+    // /// Retrive the raw GpioPin struct
+    // fn get_pin(&self) -> &GpioPin {
+    //     unsafe {
+    //         &PIN[*self as usize]
+    //             .as_ref()
+    //             .expect("invalid pin requested, pin not present")
+    //     }
+    // }
+
+    /// Find the struct Port from the Pin.
+    fn get_port(&self) -> &Port {
+        let port_num: usize = *self as usize & PORT_NUMBER_MASK;
+
+        unsafe { &PORT[port_num >> PORT_NUMBER_SHIFT] }
     }
 
-    // pub fn get_pin_mut(&self) -> &mut GpioPin {
-    //     unsafe { &mut PIN[usize::from_u32(*self as u32).unwrap()].as_mut().unwrap() }
-    // }
-    // fn get_pin_mut(&self) -> &mut Option<Pin> {
-    //     let mut port_num: u8 = *self as u8;
+    /// Find the pin number, index within the Port.
+    fn get_pin_number(&self) -> PinNumber {
+        let pin_num = *self as usize;
+
+        PinNumber::from_usize(pin_num & PIN_NUMBER_MASK).expect("get_pin_number: invalid Pin")
+    }
+
+    // /// Find the Port number. This is unchecked for out of range errors.
+    // fn get_port_number(&self) -> usize {
+    //     let mut port_num: usize = *self as usize;
 
     //     // Right shift p by 4 bits, so we can get rid of pin bits
-    //     port_num >>= 4;
-
-    //     let mut pin_num: u8 = *self as u8;
-    //     // Mask top 3 bits, so can get only the suffix
-    //     pin_num &= 0b0001111;
-
-    //     unsafe { &mut PIN[usize::from(port_num)][usize::from(pin_num)] }
+    //     port_num >>= PORT_NUMBER_SHIFT;
+    //     port_num
     // }
 
-    fn get_port(&self) -> &Port {
-        let mut port_num: u8 = *self as u8;
-
-        // Right shift p by 4 bits, so we can get rid of pin bits
-        port_num >>= 4;
-        unsafe { &PORT[usize::from(port_num)] }
+    /// Map Pin to LineId
+    fn to_lineid(&self) -> exti::LineId {
+        let pin_num = *self as usize;
+        // How to handle mapping errors? Panic? Silent? debug?
+        // This mapping (pin# -> LineId is implicit), should it be explicit?
+        exti::LineId::from_usize(pin_num & PIN_NUMBER_MASK).unwrap()
     }
 
-    // extract the last 4 bits. [3:0] is the pin number, [6:4] is the port
-    // number
-    fn get_pin_number(&self) -> u8 {
-        let mut pin_num = *self as u8;
-
-        pin_num = pin_num & 0b00001111;
-        pin_num
+    /// Map Pin to ExtiPin
+    fn to_extipin(&self) -> syscfg::ExtiPin {
+        let pin_num = *self as usize;
+        // How to handle mapping errors? Panic? Silent? debug?
+        // This mapping (pin# -> ExtiPin is implicit), should it be explicit?
+        syscfg::ExtiPin::from_usize(pin_num & PIN_NUMBER_MASK).unwrap()
     }
 
-    // extract bits [6:4], which is the port number
-    fn get_port_number(&self) -> u8 {
-        let mut port_num: u8 = *self as u8;
-
-        // Right shift p by 4 bits, so we can get rid of pin bits
-        port_num >>= 4;
-        port_num
+    /// Map Pin to ExtiPort
+    fn to_extiport(&self) -> syscfg::ExtiPort {
+        let port_num: usize = *self as usize;
+        // How to handle mapping errors? Panic? Silent? debug?
+        // This mapping (pin# -> ExitPort is implicit), should it be explicit?
+        syscfg::ExtiPort::from_usize(port_num >> PORT_NUMBER_SHIFT).unwrap()
     }
-}
 
-pub struct Port {
-    registers: StaticRef<GpioRegisters>,
-    clock: rcc::PeripheralClock,
-}
-
-pub static mut PORT: [Port; 8] = [
-    Port {
-        registers: GPIOA_REGS,
-        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOA),
-    },
-    Port {
-        registers: GPIOB_REGS,
-        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOB),
-    },
-    Port {
-        registers: GPIOC_REGS,
-        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOC),
-    },
-    Port {
-        registers: GPIOD_REGS,
-        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOD),
-    },
-    Port {
-        registers: GPIOE_REGS,
-        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOE),
-    },
-    Port {
-        registers: GPIOF_REGS,
-        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOF),
-    },
-    Port {
-        registers: GPIOG_REGS,
-        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOG),
-    },
-    Port {
-        registers: GPIOH_REGS,
-        clock: rcc::PeripheralClock::AHB2(rcc::HCLK2::GPIOH),
-    },
-];
-
-impl Pin {
-    // pub fn set_client(&self, client: &'a dyn hil::gpio::Client) {
-    //     let index = self.get_pin_number();
-
-    //     EXTI_CLIENTS.client[usize::from(index as u8)].set(client);
-    // }
-
+    /// Get GPIO pin mode
     pub fn get_mode(&self) -> Mode {
-        // let maybe = unsafe {
-        //     &PIN[usize::from((*self as u16 & 0x00f0) >> 4)][usize::from(*self as u16 & 0x000f)]
-        // };
+        // let pin = self.get_pin();
+        // let val = pin.registers.moder.get() & pin.mask;
+        // Mode::from_u32(val).unwrap_or(Mode::Input)
+        let port = self.get_port();
 
-        // let pin = maybe.as_ref().expect("get_mode: invalid pin accessed");
-
-        let pin = self.get_pin();
-        // panic!("get_mode: invalid pin accessed {}", *self as u32);
-        let val = pin.registers.moder.get() & pin.mask;
-        Mode::from_u32(val).unwrap_or(Mode::Input)
+        let mode = match self.get_pin_number() {
+            PinNumber::PIN0 => port.registers.moder.read(MODER::MODER0),
+            PinNumber::PIN1 => port.registers.moder.read(MODER::MODER1),
+            PinNumber::PIN2 => port.registers.moder.read(MODER::MODER2),
+            PinNumber::PIN3 => port.registers.moder.read(MODER::MODER3),
+            PinNumber::PIN4 => port.registers.moder.read(MODER::MODER4),
+            PinNumber::PIN5 => port.registers.moder.read(MODER::MODER5),
+            PinNumber::PIN6 => port.registers.moder.read(MODER::MODER6),
+            PinNumber::PIN7 => port.registers.moder.read(MODER::MODER7),
+            PinNumber::PIN8 => port.registers.moder.read(MODER::MODER8),
+            PinNumber::PIN9 => port.registers.moder.read(MODER::MODER9),
+            PinNumber::PIN10 => port.registers.moder.read(MODER::MODER10),
+            PinNumber::PIN11 => port.registers.moder.read(MODER::MODER11),
+            PinNumber::PIN12 => port.registers.moder.read(MODER::MODER12),
+            PinNumber::PIN13 => port.registers.moder.read(MODER::MODER13),
+            PinNumber::PIN14 => port.registers.moder.read(MODER::MODER14),
+            PinNumber::PIN15 => port.registers.moder.read(MODER::MODER15),
+        };
+        Mode::from_u32(mode).expect("get_mode translation failed")
     }
 
+    /// Set GPIO pin mode
     pub fn set_mode(&self, mode: Mode) {
         let port = self.get_port();
 
         match self.get_pin_number() {
-            0b0000 => port.registers.moder.modify(MODER::MODER0.val(mode as u32)),
-            0b0001 => port.registers.moder.modify(MODER::MODER1.val(mode as u32)),
-            0b0010 => port.registers.moder.modify(MODER::MODER2.val(mode as u32)),
-            0b0011 => port.registers.moder.modify(MODER::MODER3.val(mode as u32)),
-            0b0100 => port.registers.moder.modify(MODER::MODER4.val(mode as u32)),
-            0b0101 => port.registers.moder.modify(MODER::MODER5.val(mode as u32)),
-            0b0110 => port.registers.moder.modify(MODER::MODER6.val(mode as u32)),
-            0b0111 => port.registers.moder.modify(MODER::MODER7.val(mode as u32)),
-            0b1000 => port.registers.moder.modify(MODER::MODER8.val(mode as u32)),
-            0b1001 => port.registers.moder.modify(MODER::MODER9.val(mode as u32)),
-            0b1010 => port.registers.moder.modify(MODER::MODER10.val(mode as u32)),
-            0b1011 => port.registers.moder.modify(MODER::MODER11.val(mode as u32)),
-            0b1100 => port.registers.moder.modify(MODER::MODER12.val(mode as u32)),
-            0b1101 => port.registers.moder.modify(MODER::MODER13.val(mode as u32)),
-            0b1110 => port.registers.moder.modify(MODER::MODER14.val(mode as u32)),
-            0b1111 => port.registers.moder.modify(MODER::MODER15.val(mode as u32)),
-            _ => {}
+            PinNumber::PIN0 => port.registers.moder.modify(MODER::MODER0.val(mode as u32)),
+            PinNumber::PIN1 => port.registers.moder.modify(MODER::MODER1.val(mode as u32)),
+            PinNumber::PIN2 => port.registers.moder.modify(MODER::MODER2.val(mode as u32)),
+            PinNumber::PIN3 => port.registers.moder.modify(MODER::MODER3.val(mode as u32)),
+            PinNumber::PIN4 => port.registers.moder.modify(MODER::MODER4.val(mode as u32)),
+            PinNumber::PIN5 => port.registers.moder.modify(MODER::MODER5.val(mode as u32)),
+            PinNumber::PIN6 => port.registers.moder.modify(MODER::MODER6.val(mode as u32)),
+            PinNumber::PIN7 => port.registers.moder.modify(MODER::MODER7.val(mode as u32)),
+            PinNumber::PIN8 => port.registers.moder.modify(MODER::MODER8.val(mode as u32)),
+            PinNumber::PIN9 => port.registers.moder.modify(MODER::MODER9.val(mode as u32)),
+            PinNumber::PIN10 => port.registers.moder.modify(MODER::MODER10.val(mode as u32)),
+            PinNumber::PIN11 => port.registers.moder.modify(MODER::MODER11.val(mode as u32)),
+            PinNumber::PIN12 => port.registers.moder.modify(MODER::MODER12.val(mode as u32)),
+            PinNumber::PIN13 => port.registers.moder.modify(MODER::MODER13.val(mode as u32)),
+            PinNumber::PIN14 => port.registers.moder.modify(MODER::MODER14.val(mode as u32)),
+            PinNumber::PIN15 => port.registers.moder.modify(MODER::MODER15.val(mode as u32)),
         }
+    }
+
+    /// Get output pin type, push-pull type or open-drain
+    fn get_output_type(&self) -> Type {
+        let port = self.get_port();
+
+        let otype = match self.get_pin_number() {
+            PinNumber::PIN0 => port.registers.otyper.read(OTYPER::OT0),
+            PinNumber::PIN1 => port.registers.otyper.read(OTYPER::OT1),
+            PinNumber::PIN2 => port.registers.otyper.read(OTYPER::OT2),
+            PinNumber::PIN3 => port.registers.otyper.read(OTYPER::OT3),
+            PinNumber::PIN4 => port.registers.otyper.read(OTYPER::OT4),
+            PinNumber::PIN5 => port.registers.otyper.read(OTYPER::OT5),
+            PinNumber::PIN6 => port.registers.otyper.read(OTYPER::OT6),
+            PinNumber::PIN7 => port.registers.otyper.read(OTYPER::OT7),
+            PinNumber::PIN8 => port.registers.otyper.read(OTYPER::OT8),
+            PinNumber::PIN9 => port.registers.otyper.read(OTYPER::OT9),
+            PinNumber::PIN10 => port.registers.otyper.read(OTYPER::OT10),
+            PinNumber::PIN11 => port.registers.otyper.read(OTYPER::OT11),
+            PinNumber::PIN12 => port.registers.otyper.read(OTYPER::OT12),
+            PinNumber::PIN13 => port.registers.otyper.read(OTYPER::OT13),
+            PinNumber::PIN14 => port.registers.otyper.read(OTYPER::OT14),
+            PinNumber::PIN15 => port.registers.otyper.read(OTYPER::OT15),
+        };
+        Type::from_u32(otype).expect("get_output_type translation failed")
+    }
+
+    /// Set output pin to be push-pull/open-drain type
+    fn set_output_type(&self, otype: Type) {
+        let port = self.get_port();
+
+        match self.get_pin_number() {
+            PinNumber::PIN0 => port.registers.otyper.modify(OTYPER::OT0.val(otype as u32)),
+            PinNumber::PIN1 => port.registers.otyper.modify(OTYPER::OT1.val(otype as u32)),
+            PinNumber::PIN2 => port.registers.otyper.modify(OTYPER::OT2.val(otype as u32)),
+            PinNumber::PIN3 => port.registers.otyper.modify(OTYPER::OT3.val(otype as u32)),
+            PinNumber::PIN4 => port.registers.otyper.modify(OTYPER::OT4.val(otype as u32)),
+            PinNumber::PIN5 => port.registers.otyper.modify(OTYPER::OT5.val(otype as u32)),
+            PinNumber::PIN6 => port.registers.otyper.modify(OTYPER::OT6.val(otype as u32)),
+            PinNumber::PIN7 => port.registers.otyper.modify(OTYPER::OT7.val(otype as u32)),
+            PinNumber::PIN8 => port.registers.otyper.modify(OTYPER::OT8.val(otype as u32)),
+            PinNumber::PIN9 => port.registers.otyper.modify(OTYPER::OT9.val(otype as u32)),
+            PinNumber::PIN10 => port.registers.otyper.modify(OTYPER::OT10.val(otype as u32)),
+            PinNumber::PIN11 => port.registers.otyper.modify(OTYPER::OT11.val(otype as u32)),
+            PinNumber::PIN12 => port.registers.otyper.modify(OTYPER::OT12.val(otype as u32)),
+            PinNumber::PIN13 => port.registers.otyper.modify(OTYPER::OT13.val(otype as u32)),
+            PinNumber::PIN14 => port.registers.otyper.modify(OTYPER::OT14.val(otype as u32)),
+            PinNumber::PIN15 => port.registers.otyper.modify(OTYPER::OT15.val(otype as u32)),
+        }
+    }
+
+    /// Get GPIO pin speed
+    pub fn get_speed(&self) -> Speed {
+        let port = self.get_port();
+
+        let mode = match self.get_pin_number() {
+            PinNumber::PIN0 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR0),
+            PinNumber::PIN1 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR1),
+            PinNumber::PIN2 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR2),
+            PinNumber::PIN3 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR3),
+            PinNumber::PIN4 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR4),
+            PinNumber::PIN5 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR5),
+            PinNumber::PIN6 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR6),
+            PinNumber::PIN7 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR7),
+            PinNumber::PIN8 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR8),
+            PinNumber::PIN9 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR9),
+            PinNumber::PIN10 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR10),
+            PinNumber::PIN11 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR11),
+            PinNumber::PIN12 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR12),
+            PinNumber::PIN13 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR13),
+            PinNumber::PIN14 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR14),
+            PinNumber::PIN15 => port.registers.ospeedr.read(OSPEEDR::OSPEEDR15),
+        };
+        Speed::from_u32(mode).expect("get_speed: translation failed")
+    }
+
+    /// Set GPIO pin speed
+    pub fn set_speed(&self, speed: Speed) {
+        let port = self.get_port();
+
+        match self.get_pin_number() {
+            PinNumber::PIN0 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR0.val(speed as u32)),
+            PinNumber::PIN1 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR1.val(speed as u32)),
+            PinNumber::PIN2 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR2.val(speed as u32)),
+            PinNumber::PIN3 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR3.val(speed as u32)),
+            PinNumber::PIN4 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR4.val(speed as u32)),
+            PinNumber::PIN5 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR5.val(speed as u32)),
+            PinNumber::PIN6 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR6.val(speed as u32)),
+            PinNumber::PIN7 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR7.val(speed as u32)),
+            PinNumber::PIN8 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR8.val(speed as u32)),
+            PinNumber::PIN9 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR9.val(speed as u32)),
+            PinNumber::PIN10 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR10.val(speed as u32)),
+            PinNumber::PIN11 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR11.val(speed as u32)),
+            PinNumber::PIN12 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR12.val(speed as u32)),
+            PinNumber::PIN13 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR13.val(speed as u32)),
+            PinNumber::PIN14 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR14.val(speed as u32)),
+            PinNumber::PIN15 => port
+                .registers
+                .ospeedr
+                .modify(OSPEEDR::OSPEEDR15.val(speed as u32)),
+        }
+    }
+
+    /// Get pin pull-up/pull-down setting
+    fn get_pullup_pulldown(&self) -> PullUpPullDown {
+        let port = self.get_port();
+
+        let val = match self.get_pin_number() {
+            PinNumber::PIN0 => port.registers.pupdr.read(PUPDR::PUPDR0),
+            PinNumber::PIN1 => port.registers.pupdr.read(PUPDR::PUPDR1),
+            PinNumber::PIN2 => port.registers.pupdr.read(PUPDR::PUPDR2),
+            PinNumber::PIN3 => port.registers.pupdr.read(PUPDR::PUPDR3),
+            PinNumber::PIN4 => port.registers.pupdr.read(PUPDR::PUPDR4),
+            PinNumber::PIN5 => port.registers.pupdr.read(PUPDR::PUPDR5),
+            PinNumber::PIN6 => port.registers.pupdr.read(PUPDR::PUPDR6),
+            PinNumber::PIN7 => port.registers.pupdr.read(PUPDR::PUPDR7),
+            PinNumber::PIN8 => port.registers.pupdr.read(PUPDR::PUPDR8),
+            PinNumber::PIN9 => port.registers.pupdr.read(PUPDR::PUPDR9),
+            PinNumber::PIN10 => port.registers.pupdr.read(PUPDR::PUPDR10),
+            PinNumber::PIN11 => port.registers.pupdr.read(PUPDR::PUPDR11),
+            PinNumber::PIN12 => port.registers.pupdr.read(PUPDR::PUPDR12),
+            PinNumber::PIN13 => port.registers.pupdr.read(PUPDR::PUPDR13),
+            PinNumber::PIN14 => port.registers.pupdr.read(PUPDR::PUPDR14),
+            PinNumber::PIN15 => port.registers.pupdr.read(PUPDR::PUPDR15),
+        };
+
+        PullUpPullDown::from_u32(val).unwrap_or(PullUpPullDown::NoPullUpPullDown)
+    }
+
+    /// Set pin pull-up/pull-down setting
+    fn set_pullup_pulldown(&self, pupd: PullUpPullDown) {
+        let port = self.get_port();
+
+        match self.get_pin_number() {
+            PinNumber::PIN0 => port.registers.pupdr.modify(PUPDR::PUPDR0.val(pupd as u32)),
+            PinNumber::PIN1 => port.registers.pupdr.modify(PUPDR::PUPDR1.val(pupd as u32)),
+            PinNumber::PIN2 => port.registers.pupdr.modify(PUPDR::PUPDR2.val(pupd as u32)),
+            PinNumber::PIN3 => port.registers.pupdr.modify(PUPDR::PUPDR3.val(pupd as u32)),
+            PinNumber::PIN4 => port.registers.pupdr.modify(PUPDR::PUPDR4.val(pupd as u32)),
+            PinNumber::PIN5 => port.registers.pupdr.modify(PUPDR::PUPDR5.val(pupd as u32)),
+            PinNumber::PIN6 => port.registers.pupdr.modify(PUPDR::PUPDR6.val(pupd as u32)),
+            PinNumber::PIN7 => port.registers.pupdr.modify(PUPDR::PUPDR7.val(pupd as u32)),
+            PinNumber::PIN8 => port.registers.pupdr.modify(PUPDR::PUPDR8.val(pupd as u32)),
+            PinNumber::PIN9 => port.registers.pupdr.modify(PUPDR::PUPDR9.val(pupd as u32)),
+            PinNumber::PIN10 => port.registers.pupdr.modify(PUPDR::PUPDR10.val(pupd as u32)),
+            PinNumber::PIN11 => port.registers.pupdr.modify(PUPDR::PUPDR11.val(pupd as u32)),
+            PinNumber::PIN12 => port.registers.pupdr.modify(PUPDR::PUPDR12.val(pupd as u32)),
+            PinNumber::PIN13 => port.registers.pupdr.modify(PUPDR::PUPDR13.val(pupd as u32)),
+            PinNumber::PIN14 => port.registers.pupdr.modify(PUPDR::PUPDR14.val(pupd as u32)),
+            PinNumber::PIN15 => port.registers.pupdr.modify(PUPDR::PUPDR15.val(pupd as u32)),
+        }
+    }
+
+    /// Get pin analogu configuration, this indicates whether the pin and the
+    /// ADC are connected.
+    fn get_analog_config(&self) -> Analog {
+        let port = self.get_port();
+
+        let val = match self.get_pin_number() {
+            PinNumber::PIN0 => port.registers.ascr.read(ASCR::ASC0),
+            PinNumber::PIN1 => port.registers.ascr.read(ASCR::ASC1),
+            PinNumber::PIN2 => port.registers.ascr.read(ASCR::ASC2),
+            PinNumber::PIN3 => port.registers.ascr.read(ASCR::ASC3),
+            PinNumber::PIN4 => port.registers.ascr.read(ASCR::ASC4),
+            PinNumber::PIN5 => port.registers.ascr.read(ASCR::ASC5),
+            PinNumber::PIN6 => port.registers.ascr.read(ASCR::ASC6),
+            PinNumber::PIN7 => port.registers.ascr.read(ASCR::ASC7),
+            PinNumber::PIN8 => port.registers.ascr.read(ASCR::ASC8),
+            PinNumber::PIN9 => port.registers.ascr.read(ASCR::ASC9),
+            PinNumber::PIN10 => port.registers.ascr.read(ASCR::ASC10),
+            PinNumber::PIN11 => port.registers.ascr.read(ASCR::ASC11),
+            PinNumber::PIN12 => port.registers.ascr.read(ASCR::ASC12),
+            PinNumber::PIN13 => port.registers.ascr.read(ASCR::ASC13),
+            PinNumber::PIN14 => port.registers.ascr.read(ASCR::ASC14),
+            PinNumber::PIN15 => port.registers.ascr.read(ASCR::ASC15),
+        };
+
+        Analog::from_u32(val).unwrap_or(Analog::Disconnect)
+    }
+
+    /// Set pin analog configuration, this controls whether the pin and the
+    /// ADC are connected.
+    fn set_analog_config(&self, swicth: Analog) {
+        let port = self.get_port();
+
+        match self.get_pin_number() {
+            PinNumber::PIN0 => port.registers.ascr.modify(ASCR::ASC0.val(swicth as u32)),
+            PinNumber::PIN1 => port.registers.ascr.modify(ASCR::ASC1.val(swicth as u32)),
+            PinNumber::PIN2 => port.registers.ascr.modify(ASCR::ASC2.val(swicth as u32)),
+            PinNumber::PIN3 => port.registers.ascr.modify(ASCR::ASC3.val(swicth as u32)),
+            PinNumber::PIN4 => port.registers.ascr.modify(ASCR::ASC4.val(swicth as u32)),
+            PinNumber::PIN5 => port.registers.ascr.modify(ASCR::ASC5.val(swicth as u32)),
+            PinNumber::PIN6 => port.registers.ascr.modify(ASCR::ASC6.val(swicth as u32)),
+            PinNumber::PIN7 => port.registers.ascr.modify(ASCR::ASC7.val(swicth as u32)),
+            PinNumber::PIN8 => port.registers.ascr.modify(ASCR::ASC8.val(swicth as u32)),
+            PinNumber::PIN9 => port.registers.ascr.modify(ASCR::ASC9.val(swicth as u32)),
+            PinNumber::PIN10 => port.registers.ascr.modify(ASCR::ASC10.val(swicth as u32)),
+            PinNumber::PIN11 => port.registers.ascr.modify(ASCR::ASC11.val(swicth as u32)),
+            PinNumber::PIN12 => port.registers.ascr.modify(ASCR::ASC12.val(swicth as u32)),
+            PinNumber::PIN13 => port.registers.ascr.modify(ASCR::ASC13.val(swicth as u32)),
+            PinNumber::PIN14 => port.registers.ascr.modify(ASCR::ASC14.val(swicth as u32)),
+            PinNumber::PIN15 => port.registers.ascr.modify(ASCR::ASC15.val(swicth as u32)),
+        };
     }
 
     pub fn set_alternate_function(&self, af: AlternateFunction) {
         let port = self.get_port();
 
         match self.get_pin_number() {
-            0b0000 => port.registers.afrl.modify(AFRL::AFRL0.val(af as u32)),
-            0b0001 => port.registers.afrl.modify(AFRL::AFRL1.val(af as u32)),
-            0b0010 => port.registers.afrl.modify(AFRL::AFRL2.val(af as u32)),
-            0b0011 => port.registers.afrl.modify(AFRL::AFRL3.val(af as u32)),
-            0b0100 => port.registers.afrl.modify(AFRL::AFRL4.val(af as u32)),
-            0b0101 => port.registers.afrl.modify(AFRL::AFRL5.val(af as u32)),
-            0b0110 => port.registers.afrl.modify(AFRL::AFRL6.val(af as u32)),
-            0b0111 => port.registers.afrl.modify(AFRL::AFRL7.val(af as u32)),
-            0b1000 => port.registers.afrh.modify(AFRH::AFRH8.val(af as u32)),
-            0b1001 => port.registers.afrh.modify(AFRH::AFRH9.val(af as u32)),
-            0b1010 => port.registers.afrh.modify(AFRH::AFRH10.val(af as u32)),
-            0b1011 => port.registers.afrh.modify(AFRH::AFRH11.val(af as u32)),
-            0b1100 => port.registers.afrh.modify(AFRH::AFRH12.val(af as u32)),
-            0b1101 => port.registers.afrh.modify(AFRH::AFRH13.val(af as u32)),
-            0b1110 => port.registers.afrh.modify(AFRH::AFRH14.val(af as u32)),
-            0b1111 => port.registers.afrh.modify(AFRH::AFRH15.val(af as u32)),
-            _ => {}
-        }
-    }
-
-    // pub fn get_pinid(&self) -> GpioPin {
-    //     self
-    // }
-
-    // pub fn set_exti_lineid(&self, lineid: exti::LineId) {
-    //     self.exti_lineid.set(lineid);
-    // }
-
-    fn set_mode_output_pushpull(&self) {
-        let port = self.get_port();
-
-        match self.get_pin_number() {
-            0b0000 => port.registers.otyper.modify(OTYPER::OT0::CLEAR),
-            0b0001 => port.registers.otyper.modify(OTYPER::OT1::CLEAR),
-            0b0010 => port.registers.otyper.modify(OTYPER::OT2::CLEAR),
-            0b0011 => port.registers.otyper.modify(OTYPER::OT3::CLEAR),
-            0b0100 => port.registers.otyper.modify(OTYPER::OT4::CLEAR),
-            0b0101 => port.registers.otyper.modify(OTYPER::OT5::CLEAR),
-            0b0110 => port.registers.otyper.modify(OTYPER::OT6::CLEAR),
-            0b0111 => port.registers.otyper.modify(OTYPER::OT7::CLEAR),
-            0b1000 => port.registers.otyper.modify(OTYPER::OT8::CLEAR),
-            0b1001 => port.registers.otyper.modify(OTYPER::OT9::CLEAR),
-            0b1010 => port.registers.otyper.modify(OTYPER::OT10::CLEAR),
-            0b1011 => port.registers.otyper.modify(OTYPER::OT11::CLEAR),
-            0b1100 => port.registers.otyper.modify(OTYPER::OT12::CLEAR),
-            0b1101 => port.registers.otyper.modify(OTYPER::OT13::CLEAR),
-            0b1110 => port.registers.otyper.modify(OTYPER::OT14::CLEAR),
-            0b1111 => port.registers.otyper.modify(OTYPER::OT15::CLEAR),
-            _ => {}
-        }
-    }
-
-    fn get_pullup_pulldown(&self) -> PullUpPullDown {
-        let port = self.get_port();
-
-        let val = match self.get_pin_number() {
-            0b0000 => port.registers.pupdr.read(PUPDR::PUPDR0),
-            0b0001 => port.registers.pupdr.read(PUPDR::PUPDR1),
-            0b0010 => port.registers.pupdr.read(PUPDR::PUPDR2),
-            0b0011 => port.registers.pupdr.read(PUPDR::PUPDR3),
-            0b0100 => port.registers.pupdr.read(PUPDR::PUPDR4),
-            0b0101 => port.registers.pupdr.read(PUPDR::PUPDR5),
-            0b0110 => port.registers.pupdr.read(PUPDR::PUPDR6),
-            0b0111 => port.registers.pupdr.read(PUPDR::PUPDR7),
-            0b1000 => port.registers.pupdr.read(PUPDR::PUPDR8),
-            0b1001 => port.registers.pupdr.read(PUPDR::PUPDR9),
-            0b1010 => port.registers.pupdr.read(PUPDR::PUPDR10),
-            0b1011 => port.registers.pupdr.read(PUPDR::PUPDR11),
-            0b1100 => port.registers.pupdr.read(PUPDR::PUPDR12),
-            0b1101 => port.registers.pupdr.read(PUPDR::PUPDR13),
-            0b1110 => port.registers.pupdr.read(PUPDR::PUPDR14),
-            0b1111 => port.registers.pupdr.read(PUPDR::PUPDR15),
-            _ => 0,
-        };
-
-        PullUpPullDown::from_u32(val).unwrap_or(PullUpPullDown::NoPullUpPullDown)
-    }
-
-    fn set_pullup_pulldown(&self, pupd: PullUpPullDown) {
-        let port = self.get_port();
-
-        match self.get_pin_number() {
-            0b0000 => port.registers.pupdr.modify(PUPDR::PUPDR0.val(pupd as u32)),
-            0b0001 => port.registers.pupdr.modify(PUPDR::PUPDR1.val(pupd as u32)),
-            0b0010 => port.registers.pupdr.modify(PUPDR::PUPDR2.val(pupd as u32)),
-            0b0011 => port.registers.pupdr.modify(PUPDR::PUPDR3.val(pupd as u32)),
-            0b0100 => port.registers.pupdr.modify(PUPDR::PUPDR4.val(pupd as u32)),
-            0b0101 => port.registers.pupdr.modify(PUPDR::PUPDR5.val(pupd as u32)),
-            0b0110 => port.registers.pupdr.modify(PUPDR::PUPDR6.val(pupd as u32)),
-            0b0111 => port.registers.pupdr.modify(PUPDR::PUPDR7.val(pupd as u32)),
-            0b1000 => port.registers.pupdr.modify(PUPDR::PUPDR8.val(pupd as u32)),
-            0b1001 => port.registers.pupdr.modify(PUPDR::PUPDR9.val(pupd as u32)),
-            0b1010 => port.registers.pupdr.modify(PUPDR::PUPDR10.val(pupd as u32)),
-            0b1011 => port.registers.pupdr.modify(PUPDR::PUPDR11.val(pupd as u32)),
-            0b1100 => port.registers.pupdr.modify(PUPDR::PUPDR12.val(pupd as u32)),
-            0b1101 => port.registers.pupdr.modify(PUPDR::PUPDR13.val(pupd as u32)),
-            0b1110 => port.registers.pupdr.modify(PUPDR::PUPDR14.val(pupd as u32)),
-            0b1111 => port.registers.pupdr.modify(PUPDR::PUPDR15.val(pupd as u32)),
-            _ => {}
+            // AF register low
+            PinNumber::PIN0 => port.registers.afrl.modify(AFRL::AFRL0.val(af as u32)),
+            PinNumber::PIN1 => port.registers.afrl.modify(AFRL::AFRL1.val(af as u32)),
+            PinNumber::PIN2 => port.registers.afrl.modify(AFRL::AFRL2.val(af as u32)),
+            PinNumber::PIN3 => port.registers.afrl.modify(AFRL::AFRL3.val(af as u32)),
+            PinNumber::PIN4 => port.registers.afrl.modify(AFRL::AFRL4.val(af as u32)),
+            PinNumber::PIN5 => port.registers.afrl.modify(AFRL::AFRL5.val(af as u32)),
+            PinNumber::PIN6 => port.registers.afrl.modify(AFRL::AFRL6.val(af as u32)),
+            PinNumber::PIN7 => port.registers.afrl.modify(AFRL::AFRL7.val(af as u32)),
+            // AF register high
+            PinNumber::PIN8 => port.registers.afrh.modify(AFRH::AFRH8.val(af as u32)),
+            PinNumber::PIN9 => port.registers.afrh.modify(AFRH::AFRH9.val(af as u32)),
+            PinNumber::PIN10 => port.registers.afrh.modify(AFRH::AFRH10.val(af as u32)),
+            PinNumber::PIN11 => port.registers.afrh.modify(AFRH::AFRH11.val(af as u32)),
+            PinNumber::PIN12 => port.registers.afrh.modify(AFRH::AFRH12.val(af as u32)),
+            PinNumber::PIN13 => port.registers.afrh.modify(AFRH::AFRH13.val(af as u32)),
+            PinNumber::PIN14 => port.registers.afrh.modify(AFRH::AFRH14.val(af as u32)),
+            PinNumber::PIN15 => port.registers.afrh.modify(AFRH::AFRH15.val(af as u32)),
         }
     }
 
@@ -1106,23 +1305,22 @@ impl Pin {
         let port = self.get_port();
 
         match self.get_pin_number() {
-            0b0000 => port.registers.bsrr.write(BSRR::BS0::SET),
-            0b0001 => port.registers.bsrr.write(BSRR::BS1::SET),
-            0b0010 => port.registers.bsrr.write(BSRR::BS2::SET),
-            0b0011 => port.registers.bsrr.write(BSRR::BS3::SET),
-            0b0100 => port.registers.bsrr.write(BSRR::BS4::SET),
-            0b0101 => port.registers.bsrr.write(BSRR::BS5::SET),
-            0b0110 => port.registers.bsrr.write(BSRR::BS6::SET),
-            0b0111 => port.registers.bsrr.write(BSRR::BS7::SET),
-            0b1000 => port.registers.bsrr.write(BSRR::BS8::SET),
-            0b1001 => port.registers.bsrr.write(BSRR::BS9::SET),
-            0b1010 => port.registers.bsrr.write(BSRR::BS10::SET),
-            0b1011 => port.registers.bsrr.write(BSRR::BS11::SET),
-            0b1100 => port.registers.bsrr.write(BSRR::BS12::SET),
-            0b1101 => port.registers.bsrr.write(BSRR::BS13::SET),
-            0b1110 => port.registers.bsrr.write(BSRR::BS14::SET),
-            0b1111 => port.registers.bsrr.write(BSRR::BS15::SET),
-            _ => {}
+            PinNumber::PIN0 => port.registers.bsrr.write(BSRR::BS0::SET),
+            PinNumber::PIN1 => port.registers.bsrr.write(BSRR::BS1::SET),
+            PinNumber::PIN2 => port.registers.bsrr.write(BSRR::BS2::SET),
+            PinNumber::PIN3 => port.registers.bsrr.write(BSRR::BS3::SET),
+            PinNumber::PIN4 => port.registers.bsrr.write(BSRR::BS4::SET),
+            PinNumber::PIN5 => port.registers.bsrr.write(BSRR::BS5::SET),
+            PinNumber::PIN6 => port.registers.bsrr.write(BSRR::BS6::SET),
+            PinNumber::PIN7 => port.registers.bsrr.write(BSRR::BS7::SET),
+            PinNumber::PIN8 => port.registers.bsrr.write(BSRR::BS8::SET),
+            PinNumber::PIN9 => port.registers.bsrr.write(BSRR::BS9::SET),
+            PinNumber::PIN10 => port.registers.bsrr.write(BSRR::BS10::SET),
+            PinNumber::PIN11 => port.registers.bsrr.write(BSRR::BS11::SET),
+            PinNumber::PIN12 => port.registers.bsrr.write(BSRR::BS12::SET),
+            PinNumber::PIN13 => port.registers.bsrr.write(BSRR::BS13::SET),
+            PinNumber::PIN14 => port.registers.bsrr.write(BSRR::BS14::SET),
+            PinNumber::PIN15 => port.registers.bsrr.write(BSRR::BS15::SET),
         }
     }
 
@@ -1130,23 +1328,22 @@ impl Pin {
         let port = self.get_port();
 
         match self.get_pin_number() {
-            0b0000 => port.registers.bsrr.write(BSRR::BR0::SET),
-            0b0001 => port.registers.bsrr.write(BSRR::BR1::SET),
-            0b0010 => port.registers.bsrr.write(BSRR::BR2::SET),
-            0b0011 => port.registers.bsrr.write(BSRR::BR3::SET),
-            0b0100 => port.registers.bsrr.write(BSRR::BR4::SET),
-            0b0101 => port.registers.bsrr.write(BSRR::BR5::SET),
-            0b0110 => port.registers.bsrr.write(BSRR::BR6::SET),
-            0b0111 => port.registers.bsrr.write(BSRR::BR7::SET),
-            0b1000 => port.registers.bsrr.write(BSRR::BR8::SET),
-            0b1001 => port.registers.bsrr.write(BSRR::BR9::SET),
-            0b1010 => port.registers.bsrr.write(BSRR::BR10::SET),
-            0b1011 => port.registers.bsrr.write(BSRR::BR11::SET),
-            0b1100 => port.registers.bsrr.write(BSRR::BR12::SET),
-            0b1101 => port.registers.bsrr.write(BSRR::BR13::SET),
-            0b1110 => port.registers.bsrr.write(BSRR::BR14::SET),
-            0b1111 => port.registers.bsrr.write(BSRR::BR15::SET),
-            _ => {}
+            PinNumber::PIN0 => port.registers.bsrr.write(BSRR::BR0::SET),
+            PinNumber::PIN1 => port.registers.bsrr.write(BSRR::BR1::SET),
+            PinNumber::PIN2 => port.registers.bsrr.write(BSRR::BR2::SET),
+            PinNumber::PIN3 => port.registers.bsrr.write(BSRR::BR3::SET),
+            PinNumber::PIN4 => port.registers.bsrr.write(BSRR::BR4::SET),
+            PinNumber::PIN5 => port.registers.bsrr.write(BSRR::BR5::SET),
+            PinNumber::PIN6 => port.registers.bsrr.write(BSRR::BR6::SET),
+            PinNumber::PIN7 => port.registers.bsrr.write(BSRR::BR7::SET),
+            PinNumber::PIN8 => port.registers.bsrr.write(BSRR::BR8::SET),
+            PinNumber::PIN9 => port.registers.bsrr.write(BSRR::BR9::SET),
+            PinNumber::PIN10 => port.registers.bsrr.write(BSRR::BR10::SET),
+            PinNumber::PIN11 => port.registers.bsrr.write(BSRR::BR11::SET),
+            PinNumber::PIN12 => port.registers.bsrr.write(BSRR::BR12::SET),
+            PinNumber::PIN13 => port.registers.bsrr.write(BSRR::BR13::SET),
+            PinNumber::PIN14 => port.registers.bsrr.write(BSRR::BR14::SET),
+            PinNumber::PIN15 => port.registers.bsrr.write(BSRR::BR15::SET),
         }
     }
 
@@ -1154,23 +1351,22 @@ impl Pin {
         let port = self.get_port();
 
         match self.get_pin_number() {
-            0b0000 => port.registers.odr.is_set(ODR::ODR0),
-            0b0001 => port.registers.odr.is_set(ODR::ODR1),
-            0b0010 => port.registers.odr.is_set(ODR::ODR2),
-            0b0011 => port.registers.odr.is_set(ODR::ODR3),
-            0b0100 => port.registers.odr.is_set(ODR::ODR4),
-            0b0101 => port.registers.odr.is_set(ODR::ODR5),
-            0b0110 => port.registers.odr.is_set(ODR::ODR6),
-            0b0111 => port.registers.odr.is_set(ODR::ODR7),
-            0b1000 => port.registers.odr.is_set(ODR::ODR8),
-            0b1001 => port.registers.odr.is_set(ODR::ODR9),
-            0b1010 => port.registers.odr.is_set(ODR::ODR10),
-            0b1011 => port.registers.odr.is_set(ODR::ODR11),
-            0b1100 => port.registers.odr.is_set(ODR::ODR12),
-            0b1101 => port.registers.odr.is_set(ODR::ODR13),
-            0b1110 => port.registers.odr.is_set(ODR::ODR14),
-            0b1111 => port.registers.odr.is_set(ODR::ODR15),
-            _ => false,
+            PinNumber::PIN0 => port.registers.odr.is_set(ODR::ODR0),
+            PinNumber::PIN1 => port.registers.odr.is_set(ODR::ODR1),
+            PinNumber::PIN2 => port.registers.odr.is_set(ODR::ODR2),
+            PinNumber::PIN3 => port.registers.odr.is_set(ODR::ODR3),
+            PinNumber::PIN4 => port.registers.odr.is_set(ODR::ODR4),
+            PinNumber::PIN5 => port.registers.odr.is_set(ODR::ODR5),
+            PinNumber::PIN6 => port.registers.odr.is_set(ODR::ODR6),
+            PinNumber::PIN7 => port.registers.odr.is_set(ODR::ODR7),
+            PinNumber::PIN8 => port.registers.odr.is_set(ODR::ODR8),
+            PinNumber::PIN9 => port.registers.odr.is_set(ODR::ODR9),
+            PinNumber::PIN10 => port.registers.odr.is_set(ODR::ODR10),
+            PinNumber::PIN11 => port.registers.odr.is_set(ODR::ODR11),
+            PinNumber::PIN12 => port.registers.odr.is_set(ODR::ODR12),
+            PinNumber::PIN13 => port.registers.odr.is_set(ODR::ODR13),
+            PinNumber::PIN14 => port.registers.odr.is_set(ODR::ODR14),
+            PinNumber::PIN15 => port.registers.odr.is_set(ODR::ODR15),
         }
     }
 
@@ -1188,45 +1384,23 @@ impl Pin {
         let port = self.get_port();
 
         match self.get_pin_number() {
-            0b0000 => port.registers.idr.is_set(IDR::IDR0),
-            0b0001 => port.registers.idr.is_set(IDR::IDR1),
-            0b0010 => port.registers.idr.is_set(IDR::IDR2),
-            0b0011 => port.registers.idr.is_set(IDR::IDR3),
-            0b0100 => port.registers.idr.is_set(IDR::IDR4),
-            0b0101 => port.registers.idr.is_set(IDR::IDR5),
-            0b0110 => port.registers.idr.is_set(IDR::IDR6),
-            0b0111 => port.registers.idr.is_set(IDR::IDR7),
-            0b1000 => port.registers.idr.is_set(IDR::IDR8),
-            0b1001 => port.registers.idr.is_set(IDR::IDR9),
-            0b1010 => port.registers.idr.is_set(IDR::IDR10),
-            0b1011 => port.registers.idr.is_set(IDR::IDR11),
-            0b1100 => port.registers.idr.is_set(IDR::IDR12),
-            0b1101 => port.registers.idr.is_set(IDR::IDR13),
-            0b1110 => port.registers.idr.is_set(IDR::IDR14),
-            0b1111 => port.registers.idr.is_set(IDR::IDR15),
-            _ => false,
+            PinNumber::PIN0 => port.registers.idr.is_set(IDR::IDR0),
+            PinNumber::PIN1 => port.registers.idr.is_set(IDR::IDR1),
+            PinNumber::PIN2 => port.registers.idr.is_set(IDR::IDR2),
+            PinNumber::PIN3 => port.registers.idr.is_set(IDR::IDR3),
+            PinNumber::PIN4 => port.registers.idr.is_set(IDR::IDR4),
+            PinNumber::PIN5 => port.registers.idr.is_set(IDR::IDR5),
+            PinNumber::PIN6 => port.registers.idr.is_set(IDR::IDR6),
+            PinNumber::PIN7 => port.registers.idr.is_set(IDR::IDR7),
+            PinNumber::PIN8 => port.registers.idr.is_set(IDR::IDR8),
+            PinNumber::PIN9 => port.registers.idr.is_set(IDR::IDR9),
+            PinNumber::PIN10 => port.registers.idr.is_set(IDR::IDR10),
+            PinNumber::PIN11 => port.registers.idr.is_set(IDR::IDR11),
+            PinNumber::PIN12 => port.registers.idr.is_set(IDR::IDR12),
+            PinNumber::PIN13 => port.registers.idr.is_set(IDR::IDR13),
+            PinNumber::PIN14 => port.registers.idr.is_set(IDR::IDR14),
+            PinNumber::PIN15 => port.registers.idr.is_set(IDR::IDR15),
         }
-    }
-
-    /// Map Pin to LineId
-    fn to_lineid(&self) -> exti::LineId {
-        // How to handle mapping errors? Panic? Silent? debug?
-        // This mapping (pin# -> LineId is implicit), should it be explicit?
-        exti::LineId::from_u8(self.get_pin_number()).unwrap()
-    }
-
-    /// Map Pin to ExtiPin
-    fn to_extipin(&self) -> syscfg::ExtiPin {
-        // How to handle mapping errors? Panic? Silent? debug?
-        // This mapping (pin# -> LineId is implicit), should it be explicit?
-        syscfg::ExtiPin::from_u8(self.get_pin_number()).unwrap()
-    }
-
-    /// Map Pin to ExtiPort
-    fn to_extiport(&self) -> syscfg::ExtiPort {
-        // How to handle mapping errors? Panic? Silent? debug?
-        // This mapping (pin# -> LineId is implicit), should it be explicit?
-        syscfg::ExtiPort::from_u8(self.get_port_number()).unwrap()
     }
 
     /// Handle GPIO - EXTI 0 - IRQ
@@ -1313,42 +1487,45 @@ impl hil::gpio::Configure for Pin {
     fn make_output(&self) -> hil::gpio::Configuration {
         self.get_port().clock.enable();
 
-        self.set_mode(Mode::GeneralPurposeOutputMode);
-        self.set_mode_output_pushpull();
+        self.set_analog_config(Analog::Disconnect);
+        self.set_output_type(Type::PushPull);
+        self.set_speed(Speed::High);
+        self.set_mode(Mode::Output);
         hil::gpio::Configuration::Output
     }
 
     /// Input mode default is no internal pull-up, no pull-down (i.e.,
     /// floating). Also upon setting the mode as input, the internal schmitt
     /// trigger is automatically activated. Schmitt trigger is deactivated in
-    /// AnalogMode.
+    /// Analog Mode.
     fn make_input(&self) -> hil::gpio::Configuration {
         self.get_port().clock.enable();
 
+        self.set_analog_config(Analog::Disconnect);
         self.set_mode(Mode::Input);
         hil::gpio::Configuration::Input
     }
 
-    /// According to AN4899, Section 6.1, setting to AnalogMode, disables
-    /// internal schmitt trigger. We do not disable clock to the GPIO port,
-    /// because there could be other pins active on the port.
     fn deactivate_to_low_power(&self) {
         self.get_port().clock.enable();
 
-        self.set_mode(Mode::AnalogMode);
+        self.set_mode(Mode::Analog);
+        self.set_analog_config(Analog::Disconnect);
     }
 
     fn disable_output(&self) -> hil::gpio::Configuration {
         self.get_port().clock.enable();
 
-        self.set_mode(Mode::AnalogMode);
+        self.set_mode(Mode::Analog);
+        self.set_analog_config(Analog::Disconnect);
         hil::gpio::Configuration::LowPower
     }
 
     fn disable_input(&self) -> hil::gpio::Configuration {
         self.get_port().clock.enable();
 
-        self.set_mode(Mode::AnalogMode);
+        self.set_mode(Mode::Analog);
+        self.set_analog_config(Analog::Disconnect);
         hil::gpio::Configuration::LowPower
     }
 
@@ -1377,9 +1554,9 @@ impl hil::gpio::Configure for Pin {
     fn configuration(&self) -> hil::gpio::Configuration {
         match self.get_mode() {
             Mode::Input => hil::gpio::Configuration::Input,
-            Mode::GeneralPurposeOutputMode => hil::gpio::Configuration::Output,
-            Mode::AnalogMode => hil::gpio::Configuration::LowPower,
-            Mode::AlternateFunctionMode => hil::gpio::Configuration::Function,
+            Mode::Output => hil::gpio::Configuration::Output,
+            Mode::Analog => hil::gpio::Configuration::LowPower,
+            Mode::AlternateFunction => hil::gpio::Configuration::Function,
         }
     }
 
@@ -1388,7 +1565,7 @@ impl hil::gpio::Configure for Pin {
     }
 
     fn is_output(&self) -> bool {
-        self.get_mode() == Mode::GeneralPurposeOutputMode
+        self.get_mode() == Mode::Output
     }
 }
 
