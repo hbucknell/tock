@@ -24,6 +24,10 @@ use stm32l4xx::nvic;
 /// Support routines for debugging I/O.
 pub mod io;
 
+// Unit Tests for drivers.
+#[allow(dead_code)]
+mod test;
+
 // Number of concurrent processes this platform supports.
 const NUM_PROCS: usize = 4;
 
@@ -140,7 +144,7 @@ unsafe fn set_pin_primary_functions() {
     // AF7 is USART2_RX
     Pin::PA03.set_mode(Mode::AlternateFunction);
     Pin::PA03.set_alternate_function(AlternateFunction::AF7);
-    // cortexm4::nvic::Nvic::new(nvic::USART2);
+    cortexm4::nvic::Nvic::new(nvic::USART2).enable();
 
     // ### TODO; Not sure how interrupts will work yet as GPIO is experimental.
     // button is connected on pc13
@@ -222,10 +226,6 @@ pub unsafe fn reset_handler() {
     let buf = static_init!([u8; 1024], [0; 1024]);
     components::debug_queue::DebugQueueComponent::new(buf).finalize(());
 
-    const HELLO: &str = "hello-\r\n";
-    debug!("{}", HELLO);
-    debug_gpio!(0, set);
-
     // // WARNING: this should panic, as pin does not exist
     // stm32l4xx::gpio::Pin::PD07.get_mode();
 
@@ -239,22 +239,6 @@ pub unsafe fn reset_handler() {
     );
     CHIP = Some(chip);
 
-    const POST_CHIP: &str = "post-chip\r\n";
-    debug!("{}", POST_CHIP);
-
-    // UART
-
-    // Create a shared UART channel for kernel debug.
-    // stm32l4xx::usart::USART2.enable_clock();
-    // let uart_mux = components::console::UartMuxComponent::new(
-    //     &stm32l4xx::usart::USART2,
-    //     115200,
-    //     dynamic_deferred_caller,
-    // )
-    // .finalize(());
-
-    // io::WRITER.set_initialized();
-
     // LEDs
 
     // Clock to Port A is enabled in `set_pin_primary_functions()`
@@ -264,8 +248,6 @@ pub unsafe fn reset_handler() {
         kernel::hil::gpio::ActivationMode::ActiveHigh
     )));
 
-    const POST_LED: &str = "post-led\r\n";
-    debug!("{}", POST_LED);
     // // BUTTONs
     // let button = components::button::ButtonComponent::new(board_kernel).finalize(
     //     components::button_component_helper!((
@@ -390,12 +372,22 @@ pub unsafe fn reset_handler() {
         // gpio: gpio,
     };
 
-    // // Optional kernel tests
-    // //
-    // // See comment in `boards/imix/src/main.rs`
-    // virtual_uart_rx_test::run_virtual_uart_receive(mux_uart);
+    // pconsole.start();
 
-    pconsole.start();
+    // Taken from imix/main.rs :-
+    // Optional kernel tests. Note that these might conflict
+    // with normal operation (e.g., steal callbacks from drivers, etc.),
+    // so do not run these and expect all services/applications to work.
+    // Once everything is virtualized in the kernel this won't be a problem.
+    // -pal, 11/20/18
+    //
+    test::virtual_uart_rx_test::run_virtual_uart_receive(uart_mux);
+    //test::rng_test::run_entropy32();
+    //test::aes_ccm_test::run();
+    //test::aes_test::run_aes128_ctr();
+    //test::aes_test::run_aes128_cbc();
+    //test::log_test::run(mux_alarm, dynamic_deferred_caller);
+    //test::linear_log_test::run(mux_alarm, dynamic_deferred_caller);
 
     debug!("Initialization complete. Entering main loop");
     // panic!("Stops");

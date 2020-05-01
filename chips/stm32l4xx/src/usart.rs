@@ -429,13 +429,13 @@ impl Usart<'a> {
                 // Recevied character
                 // TODO, handle 9bit reception...
                 if self.usart_rx_state.get() == USARTStateRX::IRQ_Receiving {
-                    // Send bytes
+                    // Read bytes
                     self.rx_buffer.map(|buf| {
                         let count = self.rx_count.unwrap_or(0);
                         buf[count] = self.registers.rdr.get() as u8;
                         self.rx_count.replace(count + 1);
                     });
-                    if self.rx_count.unwrap_or(0) >= self.tx_len.get() {
+                    if self.rx_count.unwrap_or(0) >= self.rx_len.get() {
                         self.registers.cr1.modify(CR1::RXNEIE::CLEAR);
                         self.registers.cr1.modify(CR1::PEIE::CLEAR);
                         // Disable the USART error interrupt
@@ -445,9 +445,9 @@ impl Usart<'a> {
 
                         // Get client data
                         let buffer = self.rx_buffer.take();
-                        let count = self.tx_count.unwrap_or(0);
-                        self.tx_len.set(0);
-                        self.tx_count.set(0);
+                        let count = self.rx_count.unwrap_or(0);
+                        self.rx_len.set(0);
+                        self.rx_count.set(0);
 
                         // Call client
                         self.rx_client.map(|client| {
