@@ -353,6 +353,13 @@ pub struct Usart<'a> {
 // pub struct TxDMA<'a>(pub &'a dma1::Stream<'a>);
 // pub struct RxDMA<'a>(pub &'a dma1::Stream<'a>);
 
+pub static mut USART1: Usart = Usart::new(
+    _USART1_REG,
+    rcc::PeripheralClock::APB2(rcc::PCLK2::USART1),
+    // Dma1Peripheral::USART1_TX,
+    // Dma1Peripheral::USART1_RX,
+);
+
 pub static mut USART2: Usart = Usart::new(
     _USART2_REG,
     rcc::PeripheralClock::APB1(rcc::PCLK1_1::USART2),

@@ -60,8 +60,9 @@ impl Chip for Stm32L4xx {
                         //     .handle_interrupt(),
 
                         // USART ISR
+                        nvic::USART1 => usart::USART1.handle_interrupt(),
                         nvic::USART2 => usart::USART2.handle_interrupt(),
-                        // nvic::USART3 => usart::USART3.handle_interrupt(),
+                        nvic::USART3 => usart::USART3.handle_interrupt(),
 
                         // nvic::SPI3 => spi::SPI3.handle_interrupt(),
 

@@ -137,14 +137,22 @@ unsafe fn set_pin_primary_functions() {
     // Configure kernel debug gpios as early as possible
     kernel::debug::assign_gpios(Some(&Pin::PA05), None, None);
 
-    // pa02 and pa03 (USART2) is connected to ST-LINK virtual COM port
-    // AF7 is USART2_TX
+    // USART2  (PA02 and PA03) is connected to ST-LINK virtual COM port
     Pin::PA02.set_mode(Mode::AlternateFunction);
     Pin::PA02.set_alternate_function(AlternateFunction::AF7);
-    // AF7 is USART2_RX
     Pin::PA03.set_mode(Mode::AlternateFunction);
     Pin::PA03.set_alternate_function(AlternateFunction::AF7);
     cortexm4::nvic::Nvic::new(nvic::USART2).enable();
+
+    // Alternative console USART due to Linux support issues with ST-Link UART
+    // USART1  (PA09 and PA10) is connected to Arduino sockets
+    // PA09 [TXD], CN5.1 (D8) and PA10 [RXD], CN9.3 (D2)
+    Pin::PA09.set_mode(Mode::AlternateFunction);
+    Pin::PA09.set_alternate_function(AlternateFunction::AF7);
+    Pin::PA10.set_mode(Mode::AlternateFunction);
+    Pin::PA10.set_alternate_function(AlternateFunction::AF7);
+    cortexm4::nvic::Nvic::new(nvic::USART1).enable();
+    io::change_dedug_uart(&stm32l4xx::usart::USART1);
 
     // ### TODO; Not sure how interrupts will work yet as GPIO is experimental.
     // button is connected on pc13
@@ -210,12 +218,21 @@ pub unsafe fn reset_handler() {
 
     // Create a shared UART channel for kernel debug.
     let uart_mux = components::console::UartMuxComponent::new(
-        &stm32l4xx::usart::USART2,
+        &stm32l4xx::usart::USART1,
         115200,
         dynamic_deferred_caller,
     )
     .finalize(());
-    cortexm4::nvic::Nvic::new(nvic::USART2).enable();
+    cortexm4::nvic::Nvic::new(nvic::USART1).enable();
+
+    // // Create a shared UART channel for kernel debug.
+    // let uart_mux = components::console::UartMuxComponent::new(
+    //     &stm32l4xx::usart::USART2,
+    //     115200,
+    //     dynamic_deferred_caller,
+    // )
+    // .finalize(());
+    // cortexm4::nvic::Nvic::new(nvic::USART2).enable();
 
     // Setup the console.
     let pconsole = ProcessConsoleComponent::new(board_kernel, uart_mux).finalize(());

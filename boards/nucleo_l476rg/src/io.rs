@@ -25,14 +25,13 @@ pub struct Writer {
 
 /// Global static for debug writer
 pub static mut WRITER: Writer = Writer { initialized: false };
+/// Default debug UART connected to ST-link
+static mut DEBUG_UART: &stm32l4xx::usart::Usart = unsafe { &stm32l4xx::usart::USART2 };
 
-// impl Writer {
-//     /// Indicate that USART has already been initialized. Trying to double
-//     /// initialize USART2 causes STM32F446RE to go into in in-deterministic state.
-//     pub fn set_initialized(&mut self) {
-//         self.initialized = true;
-//     }
-// }
+/// Change console dbug UART, default is USART2
+pub fn change_dedug_uart(uart: &'static stm32l4xx::usart::Usart) {
+    unsafe { DEBUG_UART = uart };
+}
 
 impl Write for Writer {
     fn write_str(&mut self, s: &str) -> ::core::fmt::Result {
@@ -43,22 +42,22 @@ impl Write for Writer {
 
 impl IoWrite for Writer {
     fn write(&mut self, buf: &[u8]) {
-        let uart = unsafe { &mut stm32l4xx::usart::USART2 };
+        unsafe {
+            if !self.initialized {
+                self.initialized = true;
 
-        if !self.initialized {
-            self.initialized = true;
+                DEBUG_UART.configure(uart::Parameters {
+                    baud_rate: 115200,
+                    stop_bits: uart::StopBits::One,
+                    parity: uart::Parity::None,
+                    hw_flow_control: false,
+                    width: uart::Width::Eight,
+                });
+            }
 
-            uart.configure(uart::Parameters {
-                baud_rate: 115200,
-                stop_bits: uart::StopBits::One,
-                parity: uart::Parity::None,
-                hw_flow_control: false,
-                width: uart::Width::Eight,
-            });
-        }
-
-        for &c in buf {
-            uart.send_byte(c);
+            for &c in buf {
+                DEBUG_UART.send_byte(c);
+            }
         }
     }
 }
